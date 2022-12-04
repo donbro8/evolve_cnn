@@ -1,0 +1,50 @@
+data:
+  X_path: '/Users/Donovan/Documents/Masters/masters-ed02/coding/model_base_cnn/train/X.npy'
+  Y_path: '/Users/Donovan/Documents/Masters/masters-ed02/coding/model_base_cnn/train/Y.npy'
+  data_sample_size: 1000 # Integer or None
+  test_set_size: 0.4
+  test_val_split: 0.5
+
+cnn_layers:
+  input:
+    batch: [8, 16, 32]
+
+  conv:
+    kernel: [1, 3, 5, 7]
+    filter: [2, 4, 8, 16]
+    padding: ['valid', 'same']
+    activation: ['tanh', 'relu', 'selu', 'elu']
+
+  pool:
+    type: ['max', 'average']
+    size: [2, 3, 4, 5]
+    padding: ['valid', 'same']
+
+  dropout:
+    type: ['dropout','spatial2D']
+    rate: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+  output:
+    type: ['global', 'dense']
+
+genetic_algo:
+  population_size: 20
+  n_generations: 10
+  converge_limit: 10
+  hamming_sample_probability: 0.1
+  selection:
+    k: 2
+    probability: 0.9
+    population_size_ratio: 0.5
+  crossover:
+    n_parents: 2
+    probability: 0.9
+  mutation:
+    probability: 0.05
+
+
+general:
+  seed_value: 42 # Integer or None
+  verbose: 2
+  epochs: 10
+
