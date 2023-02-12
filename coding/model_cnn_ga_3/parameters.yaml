@@ -1,0 +1,19 @@
+data:
+  use_case: mnist # mnist, cifar-10
+  save_data:
+    set_save_path: False
+    path: '/Users/Donovan/Documents/Masters/masters-ed02/coding/model_cnn_ga_3/'
+
+  X_path: '/Users/Donovan/Documents/Masters/masters-ed02/coding/model_base_cnn/train/X.npy'
+  Y_path: '/Users/Donovan/Documents/Masters/masters-ed02/coding/model_base_cnn/train/Y.npy'
+  data_sample_size: 1000 # Integer or None
+
+  # Only applies to gibbon
+  replace: True
+  test_set_size: 0.4
+  test_val_split: 0.5
+
+general:
+  seed_value: 42 # Integer or None
+  verbose: 2
+  epochs: 10
