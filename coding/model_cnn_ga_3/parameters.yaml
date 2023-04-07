@@ -17,3 +17,22 @@ general:
   seed_value: 42 # Integer or None
   verbose: 2
   epochs: 10
+
+cnn_layers:
+  convolution:
+    kernel: [1, 3]
+    filter: [2, 4, 8, 16, 32, 64, 128, 256]
+    padding: 'same'
+
+  pooling:
+    type: ['max', 'average']
+    size: [2, 3, 4, 5]
+    padding: 'same'
+
+  dropout:
+    rate: [0.0, 0.7]
+
+neat:
+  block:
+    population_size: 10
+    node_mutation_probability: 0.1
