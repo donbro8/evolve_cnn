@@ -5,3 +5,6 @@ __pycache__
 *.data
 *.npy
 *.DS_Store
+*.csv
+*.zip
+*.pyc
