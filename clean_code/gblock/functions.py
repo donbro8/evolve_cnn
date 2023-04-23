@@ -1,4 +1,5 @@
 import yaml
+import logging
 
 def print_function(input_string, **kwargs):
     print(input_string + '...')
@@ -18,3 +19,12 @@ def load_yaml(path_to_yaml):
         except yaml.YAMLError as exc:
             print(exc)
     return yaml_dict
+
+
+def initiate_logger(logname):
+
+    logging.basicConfig(filename=logname,
+                    filemode='a',
+                    format='%(asctime)s | %(msecs)d | %(name)s | %(levelname)s | %(message)s',
+                    datefmt='%d-%m-%Y %H:%M:%S',
+                    level=logging.DEBUG)

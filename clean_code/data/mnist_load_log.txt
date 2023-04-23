@@ -1,0 +1,1 @@
+23-04-2023 13:34:46 | 780 | root | INFO | Preprocessed mnist data loaded successfully

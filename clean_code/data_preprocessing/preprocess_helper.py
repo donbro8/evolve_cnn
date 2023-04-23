@@ -21,8 +21,8 @@ from shutil import copyfile
 import pickle
 
 
-from extract_audio_helper import *
-from augmentation import augment_data,augment_background, convert_to_image
+from data_preprocessing.extract_audio_helper import *
+from data_preprocessing.augmentation import augment_data,augment_background, convert_to_image
 
 def execute_audio_extraction(audio_directory, audio_file_name, sample_rate, timestamp_directory,
                             number_seconds_to_extract, save_location):
