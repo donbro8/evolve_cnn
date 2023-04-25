@@ -14,6 +14,8 @@ from keras.datasets import mnist, cifar10, cifar100
 
 def extract_zip_files(zip_file_path, extract_path):
 
+    print('BlockNEAT.load_data.load_gibbon_data.extract_zip_files')
+
     files = os.listdir(zip_file_path)
 
     n_zip_files = 0
@@ -28,7 +30,7 @@ def extract_zip_files(zip_file_path, extract_path):
 
             with ZipFile(zip_file_path + file, 'r') as zipObj:
 
-                logging.info(f'Extracting {file} to {destination_path}')
+                print(f'Extracting {file} to {destination_path}')
 
                 print(f'Extracting {file} to {destination_path}')
 
@@ -40,7 +42,7 @@ def extract_zip_files(zip_file_path, extract_path):
 
                 for file_name in file_names:
 
-                    logging.info(f'Copying {file_name} from {dir_path} to {destination_path}')
+                    print(f'Copying {file_name} from {dir_path} to {destination_path}')
 
                     print(f'Copying {file_name} from {dir_path} to {destination_path}')
 
@@ -50,7 +52,7 @@ def extract_zip_files(zip_file_path, extract_path):
 
     if n_zip_files == 0:
 
-        logging.info(f'No zip files found in directory {zip_file_path}')
+        print(f'No zip files found in directory {zip_file_path}')
 
         raise Exception('No zip files found in directory')
     
@@ -63,9 +65,11 @@ def fetch_raw_data(source_path, destination_path, expected_file_names = None):
     Copies files from source directory to destination directory
     """
 
+    print('BlockNEAT.load_data.load_gibbon_data.fetch_raw_data')
+
     if not os.path.exists(source_path):
         
-        logging.info(f'Source directory {source_path} does not exist')
+        print(f'Source directory {source_path} does not exist')
 
         raise Exception('Source directory does not exist')
     
@@ -73,7 +77,7 @@ def fetch_raw_data(source_path, destination_path, expected_file_names = None):
 
     if len(set(file_names) - set(expected_file_names)) == len(file_names):
 
-        logging.info(f'No expected files found in source directory. Trying to fetch raw data from {source_path}...')
+        print(f'No expected files found in source directory. Trying to fetch raw data from {source_path}...')
 
         raise Exception('No expected files found in source directory')
     
@@ -95,13 +99,13 @@ def fetch_raw_data(source_path, destination_path, expected_file_names = None):
 
         if len(uncopied_files) > 0:
 
-            logging.info(f'The following files were not copied: {uncopied_files}')
+            print(f'The following files were not copied: {uncopied_files}')
 
             print(f'The following files were not copied: {uncopied_files}')
 
         elif set(copied_files) == set(expected_file_names):
 
-            logging.info('All files were copied successfully')
+            print('All files were copied successfully')
 
             print('All files were copied successfully')
 
@@ -113,9 +117,11 @@ def compile_text_files(directory, destination, file_name):
     Compiles all file names in a directory into one text file
     """
 
+    print('BlockNEAT.load_data.load_gibbon_data.compile_text_files')
+
     file_names = os.listdir(directory)
 
-    logging.info(f'Compiling {len(file_names)} files into {file_name}')
+    print(f'Compiling {len(file_names)} files into {file_name}')
 
     with open(destination + '/' + file_name, 'w') as f:
 
@@ -128,6 +134,8 @@ def move_extra_files(file_names, directory):
     """
     Move files if they are not in the list of file names
     """
+
+    print('BlockNEAT.load_data.load_gibbon_data.move_extra_files')
 
     dir_files = os.listdir(directory)
 
@@ -155,14 +163,14 @@ def move_extra_files(file_names, directory):
 
 def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite = False):
 
+    print('BlockNEAT.load_data.load_gibbon_data')
+
     # Get current working directory
     cwd = os.getcwd()
 
     data_dir = cwd + '/data/'
 
     raw_data_dir = data_dir + 'raw_gibbon_data/'
-
-    initiate_logger(data_dir + 'gibbon_load_log.txt')
 
     try:
         # Load preprocessed gibbon data
@@ -171,12 +179,12 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
         Y_train = np.load(data_dir + 'processed_data/gibbon/Y_train.npy')
         Y_test = np.load(data_dir + 'processed_data/gibbon/Y_test.npy')
 
-        logging.info('Preprocessed gibbon data loaded successfully')
+        print('Preprocessed gibbon data loaded successfully')
         print('Preprocessed gibbon data loaded successfully')
 
     except:
 
-        logging.info('Preprocessed gibbon data not found. Trying to preprocess raw data...')
+        print('Preprocessed gibbon data not found. Trying to preprocess raw data...')
         print('Preprocessed gibbon data not found. Trying to preprocess raw data...')
 
         if not os.path.exists(raw_data_dir) or overwrite:
@@ -189,13 +197,13 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
             except:
 
-                logging.info(f'Raw gibbon data not found in {raw_data_dir}. Trying to fetch raw data...')
+                print(f'Raw gibbon data not found in {raw_data_dir}. Trying to fetch raw data...')
 
                 print(f'Raw gibbon data not found in {raw_data_dir}. Trying to fetch raw data...')
 
                 if overwrite:
 
-                    logging.info('Overwrite set to True. Deleting existing raw data directory...')
+                    print('Overwrite set to True. Deleting existing raw data directory...')
 
                     print('Overwrite set to True. Deleting existing raw data directory...')
 
@@ -206,7 +214,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
                 # Check if path to raw data is provided and if all the files are there
                 if path_to_raw_gibbon_data != None:
 
-                    logging.info(f'Trying to fetch raw gibbon data from {path_to_raw_gibbon_data}...')
+                    print(f'Trying to fetch raw gibbon data from {path_to_raw_gibbon_data}...')
 
                     print(f"Trying to fetch raw gibbon data from {path_to_raw_gibbon_data}...")
 
@@ -215,13 +223,13 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
                 else:
 
-                    logging.info('No path to raw gibbon data provided.')
+                    print('No path to raw gibbon data provided.')
 
                     print('No path to raw gibbon data provided.')
 
                     if download:
 
-                        logging.info('Trying to download raw gibbon data...')
+                        print('Trying to download raw gibbon data...')
 
                         print('Trying to download raw gibbon data...')
 
@@ -237,7 +245,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
                                 if file in url:
 
-                                    logging.info(f'Downloading {file} from {url}...')
+                                    print(f'Downloading {file} from {url}...')
 
                                     print(f'Downloading {file} from {url}...')
                                 
@@ -247,7 +255,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
                     else:
 
-                        logging.info('No path to raw gibbon data provided and download set to False.')
+                        print('No path to raw gibbon data provided and download set to False.')
 
                         raise Exception('No path to raw gibbon data provided and download set to False.')
                     
@@ -273,7 +281,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
         for data_type in data_types_missing:
 
-            logging.info(f'Executing preprocessing for {data_type} data...')
+            print(f'Executing preprocessing for {data_type} data...')
 
             print('Executing preprocessing for ' + data_type + ' data...')
 
@@ -299,7 +307,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
                         augmentation_amount_gibbon, seed, augment_directory, augment_image_directory,
                         number_iterations)
             
-            logging.info(f'Preprocessing for {data_type} data complete. Saving data...')
+            print(f'Preprocessing for {data_type} data complete. Saving data...')
             
             print('Preprocessing for ' + data_type + ' data complete. Saving data...')
             
@@ -320,7 +328,7 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
         Y_train = np.load(data_dir + 'processed_data/gibbon/Y_train.npy')
         Y_test = np.load(data_dir + 'processed_data/gibbon/Y_test.npy')
 
-        logging.info('Preprocessed gibbon data loaded successfully')
+        print('Preprocessed gibbon data loaded successfully')
         
         print('Preprocessed gibbon data loaded successfully')
             
@@ -328,6 +336,8 @@ def load_gibbon_data(path_to_raw_gibbon_data = None, download = False, overwrite
 
 
 def load_mnist_data():
+
+    print('BlockNEAT.load_data.load_mnist_data')
 
     # Get current working directory
     cwd = os.getcwd()
@@ -343,13 +353,13 @@ def load_mnist_data():
         Y_train = np.load(data_dir + 'processed_data/mnist/Y_train.npy')
         Y_test = np.load(data_dir + 'processed_data/mnist/Y_test.npy')
 
-        logging.info('Preprocessed mnist data loaded successfully')
+        print('Preprocessed mnist data loaded successfully')
 
         print('Preprocessed mnist data loaded successfully')
 
     except:
 
-        logging.info('Preprocessed mnist data not found. Trying to download data...')
+        print('Preprocessed mnist data not found. Trying to download data...')
 
         print('Preprocessed mnist data not found. Trying to download data...')
 
@@ -364,7 +374,7 @@ def load_mnist_data():
         np.save(data_dir + 'processed_data/mnist/Y_train.npy', Y_train)
         np.save(data_dir + 'processed_data/mnist/Y_test.npy', Y_test)
 
-        logging.info('Preprocessed mnist data downloaded successfully and saved.')
+        print('Preprocessed mnist data downloaded successfully and saved.')
 
         print('Preprocessed mnist data downloaded successfully and saved.')
 
@@ -372,6 +382,8 @@ def load_mnist_data():
 
 
 def load_cifar10_data():
+
+    print('BlockNEAT.load_data.load_cifar10_data')
 
     # Get current working directory
     cwd = os.getcwd()
@@ -387,13 +399,13 @@ def load_cifar10_data():
         Y_train = np.load(data_dir + 'processed_data/cifar10/Y_train.npy')
         Y_test = np.load(data_dir + 'processed_data/cifar10/Y_test.npy')
 
-        logging.info('Preprocessed cifar10 data loaded successfully')
+        print('Preprocessed cifar10 data loaded successfully')
 
         print('Preprocessed cifar10 data loaded successfully')
 
     except:
 
-        logging.info('Preprocessed cifar10 data not found. Trying to download data...')
+        print('Preprocessed cifar10 data not found. Trying to download data...')
 
         print('Preprocessed cifar10 data not found. Trying to download data...')
 
@@ -408,7 +420,7 @@ def load_cifar10_data():
         np.save(data_dir + 'processed_data/cifar10/Y_train.npy', Y_train)
         np.save(data_dir + 'processed_data/cifar10/Y_test.npy', Y_test)
 
-        logging.info('Preprocessed cifar10 data downloaded successfully and saved.')
+        print('Preprocessed cifar10 data downloaded successfully and saved.')
 
         print('Preprocessed cifar10 data downloaded successfully and saved.')
 
@@ -416,6 +428,8 @@ def load_cifar10_data():
 
 
 def load_cifar100_data():
+
+    print('BlockNEAT.load_data.load_cifar100_data')
     
     # Get current working directory
     cwd = os.getcwd()
@@ -433,13 +447,13 @@ def load_cifar100_data():
         Y_train = np.load(data_dir + 'processed_data/cifar100/Y_train.npy')
         Y_test = np.load(data_dir + 'processed_data/cifar100/Y_test.npy')
 
-        logging.info('Preprocessed cifar100 data loaded successfully')
+        print('Preprocessed cifar100 data loaded successfully')
 
         print('Preprocessed cifar100 data loaded successfully')
 
     except:
 
-        logging.info('Preprocessed cifar100 data not found. Trying to download data...')
+        print('Preprocessed cifar100 data not found. Trying to download data...')
 
         print('Preprocessed cifar100 data not found. Trying to download data...')
 
@@ -454,7 +468,7 @@ def load_cifar100_data():
         np.save(data_dir + 'processed_data/cifar100/Y_train.npy', Y_train)
         np.save(data_dir + 'processed_data/cifar100/Y_test.npy', Y_test)
 
-        logging.info('Preprocessed cifar100 data downloaded successfully and saved.')
+        print('Preprocessed cifar100 data downloaded successfully and saved.')
 
         print('Preprocessed cifar100 data downloaded successfully and saved.')
 

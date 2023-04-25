@@ -23,7 +23,7 @@ def load_yaml(path_to_yaml):
 
 def initiate_logger(logname):
 
-    logging.basicConfig(filename=logname,
+    return logging.basicConfig(filename=logname,
                         filemode='a',
                         format='%(asctime)s | %(msecs)d | %(name)s | %(levelname)s | %(message)s',
                         datefmt='%d-%m-%Y %H:%M:%S',

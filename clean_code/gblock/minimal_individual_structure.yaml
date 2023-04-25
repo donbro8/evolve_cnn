@@ -1,6 +1,6 @@
 ---
 nodes:
-  node_in:
+  node_input:
     type: 'input'
     attributes: {}
     n_connections_in: 0
@@ -15,7 +15,7 @@ nodes:
     following_nodes: ['node_output']
     connectedness: 0
 
-  node_out:
+  node_output:
     type: 'output'
     attributes: {}
     n_connections_in: 1
