@@ -49,7 +49,7 @@ meta_data:
   n_convolution: 0
   n_pooling: 0
   n_dropout: 0
-  connections: [('node_input', 'node_output', 'connection_1')]
+  connections: [['node_input', 'node_output', 'connection_1']] # ('node_input', 'node_output', 'connection_1')
   connections_enabled: [True]
   node_list: ['node_input', 'node_output']
 

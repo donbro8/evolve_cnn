@@ -34,5 +34,5 @@ model:
 
 neat:
   block:
-    population_size: 10
+    population_size: 2
     node_mutation_probability: 0.1
