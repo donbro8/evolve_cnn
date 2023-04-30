@@ -1124,18 +1124,80 @@ class BlockNEAT:
         # Therefore, fitness is only shared within the species since all outside of species have a distance of 0
         # Reduces to f_i_prime = f_i / N_species
 
-        fitness_i = population[individual_i]['scores']['fitness']
-        species = population[individual_i]['meta_data']['species']
-        members = population['species'][species]['members']
+        population_copy = deepcopy(population)
 
-        return fitness_i / len(members)
+        fitness_i = population_copy[individual_i]['scores']['fitness']
+        species = population_copy[individual_i]['meta_data']['species']
+        members = population_copy['species'][species]['members']
+
+        population_copy[individual_i]['scores']['fitness_shared'] = fitness_i / len(members)
+
+        return population_copy
 
 
+
+    def offspring_proportion(self, population):
+
+        population_copy = deepcopy(population)
+
+        population_fitness_sum = np.sum(np.array([population_copy[individual]['scores']['fitness_shared'] for individual in population_copy.keys()]))
+
+        for s in population_copy['species']:
+
+            fitness_species_sum = np.sum(np.array([population_copy[individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']]))
+
+            population_copy['species'][s]['n_offspring'] = np.floor(fitness_species_sum / population_fitness_sum) * self.population_size
+
+        return population_copy
 
     
+    def get_subpopulation(self, population, proportion = 1/3, fitness_based_probability = 1):
+
+        population_copy = deepcopy(population)
+
+        subpopulation = {}
+
+        for s in population_copy['species']:
+
+            members = population_copy['species'][s]['members']
+
+            sub_species_size = int(np.round(len(members) * proportion))
+
+            r = np.random.random()
+
+            if sub_species_size > 0 and r < fitness_based_probability:
+
+                species_fitnesses_arg_sort = np.argsort(np.array([population_copy[individual]['scores']['fitness_shared'] for individual in members]))
+
+                subpopulation[s] = {'members': np.array(members)[species_fitnesses_arg_sort][-sub_species_size:].tolist()}
+
+            else:
+
+                subpopulation[s] = {'members': np.random.choice(population_copy['species'][s]['members'], size = sub_species_size, replace = False).tolist()}
+
+        return subpopulation
+    
+    
+    def parent_selection(self, subpopulation, species, n = 2): # Ignoring fitness based selection for now
+        return np.random.choice(subpopulation[species]['members'], size = n, replace = False).tolist()
+    
+    
+    def get_validation_data(self, X, y, validation_split = None):
+
+        if validation_split is None:
+            validation_split = self.data_parameters['test_val_split']
+
+        return train_test_split(X, y, test_size = validation_split, random_state = self.data_parameters['seed_value'])
 
     
-    def selection(self, population, fitnesses, n):
+    def model_training(self, individual, X_train, y_train, X_val, y_val, inputs = None, outputs = None, epochs = 10, batch_size = 32, verbose = 0):
 
-        # Select the top n individuals based on their fitness
-        return [population[i] for i in np.argsort(fitnesses)[::-1][:n]]
+        if inputs is None:
+            inputs = Input(shape = (28, 28, 1), name = 'node_i')
+
+        individual = self.build_layers(individual, inputs = inputs)
+        individual = self.build_block(individual, node = 'node_input', valid_nodes = None, visited_nodes = [])
+
+        model.fit(X_train, y_train, epochs = epochs, batch_size = batch_size, verbose = verbose, validation_data = (X_val, y_val))
+
+        return model
