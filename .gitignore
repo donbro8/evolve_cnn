@@ -128,3 +128,18 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .DS_Store
+
+*.ipynb_checkpoints
+__pycache__
+*.wav
+*.pkl
+*.data
+*.npy
+*.DS_Store
+*.csv
+*.zip
+*.pyc
+*.gv
+*.pdf
+model_cnn_ga.ipynb
+*.png
