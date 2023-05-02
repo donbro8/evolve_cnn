@@ -1190,14 +1190,6 @@ class BlockNEAT:
         return train_test_split(X, y, test_size = validation_split, random_state = self.data_parameters['seed_value'])
 
     
-    def model_training(self, individual, X_train, y_train, X_val, y_val, inputs = None, outputs = None, epochs = 10, batch_size = 32, verbose = 0):
+    def compile_model(self, individual, name = 'block_cnn'):
 
-        if inputs is None:
-            inputs = Input(shape = (28, 28, 1), name = 'node_i')
-
-        individual = self.build_layers(individual, inputs = inputs)
-        individual = self.build_block(individual, node = 'node_input', valid_nodes = None, visited_nodes = [])
-
-        model.fit(X_train, y_train, epochs = epochs, batch_size = batch_size, verbose = verbose, validation_data = (X_val, y_val))
-
-        return model
+        return Model(inputs = individual['nodes']['node_input'], outputs = individual['nodes']['node_output'], name = name)
