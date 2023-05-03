@@ -1190,6 +1190,71 @@ class BlockNEAT:
         return train_test_split(X, y, test_size = validation_split, random_state = self.data_parameters['seed_value'])
 
     
-    def compile_model(self, individual, name = 'block_cnn'):
+    def compile_block(self, individual, name = 'block_cnn'):
 
-        return Model(inputs = individual['nodes']['node_input'], outputs = individual['nodes']['node_output'], name = name)
+        flatten = Flatten()(individual['nodes']['node_output']['layer'])
+        dense = Dense(128, activation = 'relu')(flatten) 
+        output = Dense(10, activation = 'softmax')(dense)
+
+        individual['meta_data']['model'] = Model(inputs = individual['nodes']['node_input'], outputs = output, name = name)
+
+        return individual
+    
+    def train_model(self, individual, X_train, y_train, X_val, y_val):
+
+        individual['meta_data']['model'].compile(loss = 'categorical_crossentropy', 
+                                                 optimizer = 'adam', 
+                                                 metrics = ['accuracy', 'loss'], 
+                                                 val_metrics = ['accuracy', 'loss'])
+
+        history = individual['meta_data']['model'].fit(X_train, y_train, 
+                                             epochs = self.general_parameters['epochs'], 
+                                             batch_size = self.general_parameters['batch_size'], 
+                                             verbose = self.general_parameters['verbose'], 
+                                             validation_data = (X_val, y_val))
+        
+        individual['scores']['history'] = history.history
+
+        return individual
+    
+
+    def count_block_params(self, individual):
+
+        model = individual['meta_data']['model']
+
+        params = 0
+
+        for layer in model.layers:
+
+            if layer.name == 'node_input':
+
+                start = True
+
+            if start == True:
+
+                params += layer.count_params()
+
+            if layer.name == 'node_output':
+
+                start = False
+
+        return params
+
+
+    
+    def fitness(self, individual, beta = 1.0):
+
+        block_params = self.count_block_params(individual)
+
+        return individual['scores']['history']['val_accuracy'][-1] * np.exp(-beta * block_params / 1) # 1 is the number of blocks in the network
+
+
+    def evolve_block(self):
+
+        generations = self.neat_parameters['block']['generation_limit']
+
+        population = self.generate_initial_population()
+
+        for g in generations:
+
+            
