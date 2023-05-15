@@ -14,8 +14,8 @@ data:
 
 general:
   seed_value: 42 # Integer or None
-  verbose: 2
-  epochs: 10
+  verbose: 1 # 0, 1, 2
+  epochs: 2
   batch_size: 32
 
 model:
@@ -35,6 +35,7 @@ model:
 neat:
   block:
     population_size: 10
-    node_mutation_probability: 0.1
+    mutation_probability: 0.1
     generation_limit: 10
+    n_parents: 2
   
