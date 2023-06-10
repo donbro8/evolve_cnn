@@ -27,7 +27,7 @@ def print_to_log(input_string, path = None, file_name = None):
     date_time_string = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     with open(dir, 'a') as f:
-        f.write(date_time_string + ' | ' + input_string + '\n')
+        f.write(str(date_time_string) + ' | ' + str(input_string) + '\n')
 
 def load_yaml(path_to_yaml):
     with open(path_to_yaml, 'r') as stream:

@@ -804,84 +804,84 @@ class BlockNEAT:
          # Loop through all nodes
         for node in individual_copy['nodes']:
 
-            # If the layer already exists, then skip the node
-            try:
-                individual_copy['nodes'][node]['layer']
+            # # If the layer already exists, then skip the node
+            # try:
+            #     individual_copy['nodes'][node]['layer']
 
-            # If the layer does not exist, then define the layer
-            except:
+            # # If the layer does not exist, then define the layer
+            # except:
                     
-                # If the node is the input node, then set the layer equal to the inputs
-                if node == 'node_input':
+            # If the node is the input node, then set the layer equal to the inputs
+            if node == 'node_input':
 
-                    individual_copy['nodes'][node]['attributes']['layer_object'] = inputs
-                    individual_copy['nodes'][node]['layer'] = inputs
-                    individual_copy['nodes'][node]['concat_list'] = []
-                    individual_copy['nodes'][node]['concat_list_names'] = []
+                individual_copy['nodes'][node]['attributes']['layer_object'] = inputs
+                individual_copy['nodes'][node]['layer'] = inputs
+                individual_copy['nodes'][node]['concat_list'] = []
+                individual_copy['nodes'][node]['concat_list_names'] = []
 
-                # If the node is the output node, then set the layer equal to None since it is defined by the previous incoming layer(s)
-                elif node == 'node_output':
-                    individual_copy['nodes'][node]['layer'] = None
-                    individual_copy['nodes'][node]['concat_list'] = []
-                    individual_copy['nodes'][node]['concat_list_names'] = []
+            # If the node is the output node, then set the layer equal to None since it is defined by the previous incoming layer(s)
+            elif node == 'node_output':
+                individual_copy['nodes'][node]['layer'] = None
+                individual_copy['nodes'][node]['concat_list'] = []
+                individual_copy['nodes'][node]['concat_list_names'] = []
 
-                # If the node is anything other than the input node or the output node
+            # If the node is anything other than the input node or the output node
 
-                    # If the node is a convolution node
-                elif individual_copy['nodes'][node]['type'] == 'convolution':
+                # If the node is a convolution node
+            elif individual_copy['nodes'][node]['type'] == 'convolution':
 
-                    # Get the attributes of the convolution node
-                    filters = individual_copy['nodes'][node]['attributes']['filter']
-                    kernel = (individual_copy['nodes'][node]['attributes']['kernel'], individual_copy['nodes'][node]['attributes']['kernel'])
-                    padding = individual_copy['nodes'][node]['attributes']['padding']
+                # Get the attributes of the convolution node
+                filters = individual_copy['nodes'][node]['attributes']['filter']
+                kernel = (individual_copy['nodes'][node]['attributes']['kernel'], individual_copy['nodes'][node]['attributes']['kernel'])
+                padding = individual_copy['nodes'][node]['attributes']['padding']
 
-                    # Set the layer to a convolution layer
-                    individual_copy['nodes'][node]['attributes']['layer_object'] = Conv2D(filters = filters, kernel_size = kernel, padding = padding, name = node) 
+                # Set the layer to a convolution layer
+                individual_copy['nodes'][node]['attributes']['layer_object'] = Conv2D(filters = filters, kernel_size = kernel, padding = padding, name = node) 
 
-                    # Functional layer is empty
-                    individual_copy['nodes'][node]['layer'] = None
-                    individual_copy['nodes'][node]['concat_list'] = []
-                    individual_copy['nodes'][node]['concat_list_names'] = []
+                # Functional layer is empty
+                individual_copy['nodes'][node]['layer'] = None
+                individual_copy['nodes'][node]['concat_list'] = []
+                individual_copy['nodes'][node]['concat_list_names'] = []
 
-                # If the node is a pooling node
-                elif individual_copy['nodes'][node]['type'] == 'pooling':
+            # If the node is a pooling node
+            elif individual_copy['nodes'][node]['type'] == 'pooling':
 
-                    # Get the attributes of the pooling node
-                    pool_size = (individual_copy['nodes'][node]['attributes']['size'], individual_copy['nodes'][node]['attributes']['size'])
-                    pool_type = individual_copy['nodes'][node]['attributes']['type']
-                    padding = individual_copy['nodes'][node]['attributes']['padding']
+                # Get the attributes of the pooling node
+                pool_size = (individual_copy['nodes'][node]['attributes']['size'], individual_copy['nodes'][node]['attributes']['size'])
+                pool_type = individual_copy['nodes'][node]['attributes']['type']
+                padding = individual_copy['nodes'][node]['attributes']['padding']
 
-                    # Set the layer to a pooling layer
-                    if pool_type == 'max':
-                        individual_copy['nodes'][node]['attributes']['layer_object'] = MaxPooling2D(pool_size = pool_size, strides=(1, 1), padding = padding, name = node)
+                # Set the layer to a pooling layer
+                if pool_type == 'max':
+                    individual_copy['nodes'][node]['attributes']['layer_object'] = MaxPooling2D(pool_size = pool_size, strides=(1, 1), padding = padding, name = node)
 
-                    elif pool_type == 'average':
-                        individual_copy['nodes'][node]['attributes']['layer_object'] = AveragePooling2D(pool_size = pool_size, strides=(1, 1), padding = padding, name = node)
-
-                    else:
-                        raise Exception('Invalid pooling type')
-                    
-                    # Functional layer is empty
-                    individual_copy['nodes'][node]['layer'] = None
-                    individual_copy['nodes'][node]['concat_list'] = []
-                    individual_copy['nodes'][node]['concat_list_names'] = []
-
-                # If the node is a dropout node
-                elif individual_copy['nodes'][node]['type'] == 'dropout':
-
-                    # Get the attributes of the dropout node
-                    rate = individual_copy['nodes'][node]['attributes']['rate']
-
-                    # Set the layer to a dropout layer
-                    individual_copy['nodes'][node]['attributes']['layer_object'] = SpatialDropout2D(rate = rate, name = node)
-
-                    # Functional layer is empty
-                    individual_copy['nodes'][node]['layer'] = None
-                    individual_copy['nodes'][node]['concat_list'] = []
-                    individual_copy['nodes'][node]['concat_list_names'] = []
+                elif pool_type == 'average':
+                    individual_copy['nodes'][node]['attributes']['layer_object'] = AveragePooling2D(pool_size = pool_size, strides=(1, 1), padding = padding, name = node)
 
                 else:
-                    raise Exception('Invalid node type')
+                    raise Exception('Invalid pooling type')
+                
+                # Functional layer is empty
+                individual_copy['nodes'][node]['layer'] = None
+                individual_copy['nodes'][node]['concat_list'] = []
+                individual_copy['nodes'][node]['concat_list_names'] = []
+
+            # If the node is a dropout node
+            elif individual_copy['nodes'][node]['type'] == 'dropout':
+
+                # Get the attributes of the dropout node
+                rate = individual_copy['nodes'][node]['attributes']['rate']
+
+                # Set the layer to a dropout layer
+                individual_copy['nodes'][node]['attributes']['layer_object'] = SpatialDropout2D(rate = rate, name = node)
+
+                # Functional layer is empty
+                individual_copy['nodes'][node]['layer'] = None
+                individual_copy['nodes'][node]['concat_list'] = []
+                individual_copy['nodes'][node]['concat_list_names'] = []
+
+            else:
+                raise Exception('Invalid node type')
                 
         return individual_copy
     
@@ -1113,14 +1113,14 @@ class BlockNEAT:
 
         # Original is multiplied by 1/N where N is the number of genes in the larger genome
 
-        # N = max(len(individual1['connections']), len(individual2['connections']))
+        N = max(len(individual1['connections']), len(individual2['connections']))
 
-        return c1*self.excess_genes(individual1, individual2) + c2*self.disjoint_genes(individual1, individual2) + c3*self.disjoint_enabled_genes(individual1, individual2)
+        return 1/N * (c1*self.excess_genes(individual1, individual2) + c2*self.disjoint_genes(individual1, individual2) + c3*self.disjoint_enabled_genes(individual1, individual2))
 
 
     
     
-    def speciation(self, population, delta_t = 3.0):
+    def speciation(self, population, delta_t = 4.0):
 
         """
         The population is divided into species based on the compatibility distance between individuals.
@@ -1190,8 +1190,12 @@ class BlockNEAT:
 
                 print_to_log('______Comparing individual to representative: {}'.format(representative))
 
+                compatability_distance = self.compatibility_distance(population_copy['individuals'][individual], population_copy['individuals'][representative])
+
+                print_to_log(f'______Compatability distance {compatability_distance} compared to delta {delta_t}')
+                
                 # If the compatibility distance between the current individual and the representative is less than delta_t
-                if self.compatibility_distance(population_copy['individuals'][individual], population_copy['individuals'][representative]) < delta_t:
+                if compatability_distance < delta_t:
 
                     # Add the current individual to the species and update its meta data
                     population_copy['species'][s]['members'].append(individual)
@@ -1262,6 +1266,8 @@ class BlockNEAT:
 
         population_copy = deepcopy(population)
 
+        fitness_species_sums = [np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']])) for s in species]
+
         # Calculate the sum of the shared fitness for the entire population
         population_fitness_sum = np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['individuals'].keys()]))
 
@@ -1271,19 +1277,54 @@ class BlockNEAT:
 
         n_species = len(species)
 
+        n_individuals = self.population_size
+
+        n_species_next_gen = np.min([np.floor(n_individuals / 2), n_species]) # Number of species cannot be greater than half the population size
+
         fitness_species_sums = [np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']])) for s in species]
         
-        species = np.array(species)[np.argsort(fitness_species_sums)[::-1]]
-        fitness_species_sums = np.sort(fitness_species_sums)[::-1]
+        species = np.array(species)[np.argsort(fitness_species_sums)[::-1]][:n_species_next_gen]
+        fitness_species_sums = np.sort(fitness_species_sums)[::-1][:n_species_next_gen]
+        n_members = np.array([len(population_copy['species'][s]['members']) for s in species])
+
+        n_offspring = np.where(n_members <= 2, 1, 0)
+        n_offspring = np.where(fitness_species_sums == 0, 1, n_offspring)
 
         print_to_log(f'Number of species in {species} is {n_species}')
         print_to_log('Species fitness sums: {}'.format(fitness_species_sums))
 
-        assigned = 0
-        unassigned = self.population_size
+        # n_members = [8, 4, 3, 2, 1, 1, 1, 1, 1, 1]
+        # fitness_species_sums = [0.51, 0.5, 0.2, 0, 0, 0, 0, 0, 0, 0]
+        # population_fitness_sum = sum(fitness_species_sums)
+
+        # n_offspring = np.where(np.array(n_members) <= 2, 1, 0)
+        # print(n_offspring)
+
+        # n_remaining = np.sum(n_members) - np.sum(n_offspring)
+
+        # for i in range(len(n_offspring)):
+        #     if n_offspring[::-1][i] == 0:
+        #         n_offspring[::-1][i] = np.ceil(fitness_species_sums[::-1][i] / population_fitness_sum * n_remaining)
+        #         n_remaining -= n_offspring[::-1][i]
+
+        #         if i == len(n_offspring) - 1:
+        #             n_offspring[::-1][i] += n_remaining
+
+        # print(n_offspring)
+        # print(sum(n_offspring))
+
+        assigned = sum(n_offspring)
+        unassigned = self.population_size - assigned
         
         # Loop through all species
-        for i in range(len(species)):
+        for i in range(n_species_next_gen):
+
+            if n_offspring[::-1][i] == 0:
+                n_offspring[::-1][i] = np.ceil(fitness_species_sums[::-1][i] / np.sum(fitness_species_sums) * unassigned)
+                unassigned -= n_offspring[::-1][i]
+
+                if i == n_species_next_gen - 1:
+                    n_offspring[::-1][i] += unassigned
 
             # Assign the number of offspring to be generated by the current species
             # in descending order of fitness, i.e. prioritise the highest fitness species
@@ -1292,39 +1333,40 @@ class BlockNEAT:
             # then distribute the remaning offspring evenly across the remaining species
             # This could lead to an excat same proportion as was input 
 
-            s = species[i]
+            # s = species[i]
 
-            print_to_log(f'Calculating offspring proportion for species: {s}')
-            if i == len(species) - 1 and assigned < self.population_size:
-                print_to_log('Last species, so assigning remaining offspring')
-                population_copy['species'][s]['n_offspring'] = unassigned
-                assigned += unassigned
-                unassigned = 0
+            # print_to_log(f'Calculating offspring proportion for species: {s}')
 
-            # Calculate the number of offspring to be generated by the current species
-            elif n_species == 1:
-
-                print_to_log('Only one species in population, so all individuals will be selected for reproduction')
-                population_copy['species'][s]['n_offspring'] = len(population_copy['individuals'].keys())
-
-            elif len(population_copy['species'][s]['members']) < 3:
-
-                print_to_log('Species has less than 3 members, so one offspring will be generated')
-                population_copy['species'][s]['n_offspring'] = 1
-
-            elif population_fitness_sum == 0:
-
-                print_to_log('Population fitness sum is 0, so proportion stays the same as before')
-                population_copy['species'][s]['n_offspring'] = len(population_copy['species'][s]['members'])
+            # # If the current species has less than 3 members, then only one offspring will be generated
+            # if len(population_copy['species'][s]['members']) <= 2:
+            #     print_to_log('Species has two or less members, so one offspring will be generated')
+            #     population_copy['species'][s]['n_offspring'] = 1
             
-            # Otherwise, the number of offspring is calculated as the floor of the sum of the shared fitness for the current species divided by the sum of the shared fitness for the population multiplied by the population size
-            else:
+            # # If the current species is the last species and the total number of offspring assigned so far is less than the population size
+            # elif i == len(species) - 1 and assigned < self.population_size:
+            #     print_to_log('Last species, so assigning remaining offspring')
+            #     population_copy['species'][s]['n_offspring'] = unassigned
+            #     assigned += unassigned
+            #     unassigned = 0
 
-                print_to_log(f'Calculating offspring proportion given (species fitness sum (population size {self.population_size})*{fitness_species_sum})/({population_fitness_sum} and population fitness sum)')
-                population_copy['species'][s]['n_offspring'] = np.floor(fitness_species_sums[i] / population_fitness_sum) * self.population_size
+            # # If there is only 1 species in the population, then all individuals are selected for reproduction
+            # elif n_species == 1:
+            #     print_to_log('Only one species in population, so all individuals will be selected for reproduction')
+            #     population_copy['species'][s]['n_offspring'] = len(population_copy['individuals'].keys())
 
-            assigned += population_copy['species'][s]['n_offspring']
-            unassigned -= population_copy['species'][s]['n_offspring']
+
+            # # If the population fitness sum is 0, then the number of offspring is the same as the number of members in the current species
+            # elif population_fitness_sum == 0:
+            #     print_to_log('Population fitness sum is 0, so proportion stays the same as before')
+            #     population_copy['species'][s]['n_offspring'] = len(population_copy['species'][s]['members'])
+            
+            # # Otherwise, the number of offspring is calculated as the floor of the sum of the shared fitness for the current species divided by the sum of the shared fitness for the population multiplied by the population size
+            # else:
+            #     print_to_log(f'Calculating offspring proportion given (species fitness sum (population size {self.population_size})*{fitness_species_sums})/({population_fitness_sum} and population fitness sum)')
+            #     population_copy['species'][s]['n_offspring'] = np.floor(fitness_species_sums[i] / population_fitness_sum) * self.population_size
+
+            # assigned += population_copy['species'][s]['n_offspring']
+            # unassigned -= population_copy['species'][s]['n_offspring']
 
         return population_copy
 
@@ -1383,7 +1425,7 @@ class BlockNEAT:
 
                 sub_species_size = len(values)
 
- # Get random number between 0 and 1
+                # Get random number between 0 and 1
                 r = np.random.random()
 
                 # If the sub_species_size is greater than 0 and the random number is less than the fitness based probability
@@ -1422,7 +1464,16 @@ class BlockNEAT:
         if validation_split is None:
             validation_split = self.data_parameters['test_val_split']
 
-        return train_test_split(X, y, test_size = validation_split, random_state = self.general_parameters['seed_value'])
+        X_train, X_val, Y_train, Y_val = train_test_split(X, y, test_size = validation_split, random_state = self.general_parameters['seed_value'])
+
+        # X_train = X_train.reshape(X_train.shape[0], 28, 28, 1).astype('float32') / 255
+        # X_val  = X_val.reshape(X_val.shape[0], 28, 28, 1).astype('float32') / 255
+
+        # # convert class vectors to binary class matrices
+        # Y_train = to_categorical(Y_train, 10)
+        # Y_val = to_categorical(Y_val, 10)
+
+        return X_train, X_val, Y_train, Y_val
 
     
     def compile_network(self, individual, name = 'block_cnn'):
@@ -1535,7 +1586,10 @@ class BlockNEAT:
 
     def evolve_block(self, X, y, save_path = os.getcwd() + '/data/evolution/', run = 1):
 
+        
+        print_to_log(50*'_')
         print_to_log('Evolution starting...')
+        print_to_log(50*'_')
 
         generations = self.neat_parameters['block']['generation_limit']
 
@@ -1698,7 +1752,8 @@ class BlockNEAT:
                             new_population['individuals'][individual_id]['meta_data']['parents'] = set(parents)
 
 
-
+            self.previous_population = self.population
+            
             self.population = new_population
                     # Crossover
                     # Mutation
