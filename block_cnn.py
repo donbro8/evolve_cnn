@@ -162,29 +162,32 @@ class BlockNEAT:
             filter = np.random.choice(self.model_parameters['convolution']['filter'])
             padding = np.random.choice(self.model_parameters['convolution']['padding'])
             node_attr = {'kernel':kernel, 'filter':filter, 'padding':padding}
-            try:
-                node_id = 'node_c' + str(max([int(item.replace('node_c', '')) for item in self.nodes if 'node_c' in item]) + 1)
-            except:
-                node_id = 'node_c1'
+            node_id = 'node_c_k{}_f{}_p{}'.format(kernel, filter, padding)
+            # try:
+            #     node_id = 'node_c' + str(max([int(item.replace('node_c', '')) for item in self.nodes if 'node_c' in item]) + 1)
+            # except:
+            #     node_id = 'node_c1'
 
 
         elif layer_type == 'pooling':
             pool_type = np.random.choice(self.model_parameters['pooling']['type'])
             size = np.random.choice(self.model_parameters['pooling']['size'])
             node_attr = {'type':pool_type, 'size':size, 'padding':'same'}
-            try:
-                node_id = 'node_p' + pool_type[0] + str(max([int(item.replace('node_p' + pool_type[0], '')) for item in self.nodes if 'node_p' + pool_type[0] in item]) + 1)
-            except:
-                node_id = 'node_p' + pool_type[0] + '1'
+            node_id = 'node_p_t{}_s{}'.format(pool_type, size)
+            # try:
+            #     node_id = 'node_p' + pool_type[0] + str(max([int(item.replace('node_p' + pool_type[0], '')) for item in self.nodes if 'node_p' + pool_type[0] in item]) + 1)
+            # except:
+            #     node_id = 'node_p' + pool_type[0] + '1'
 
 
         elif layer_type == 'dropout':
             dropout_rate = np.round(np.random.random()*(np.max(self.model_parameters['dropout']['rate']) - np.min(self.model_parameters['dropout']['rate'])) + np.min(self.model_parameters['dropout']['rate']), 2)
             node_attr = {'rate':dropout_rate}
-            try:
-                node_id = 'node_d' + str(max([int(item.replace('node_d', '')) for item in self.nodes if 'node_d' in item]) + 1)
-            except:
-                node_id = 'node_d1'
+            node_id = 'node_d_r{}'.format(dropout_rate)
+            # try:
+            #     node_id = 'node_d' + str(max([int(item.replace('node_d', '')) for item in self.nodes if 'node_d' in item]) + 1)
+            # except:
+            #     node_id = 'node_d1'
 
         else:
             raise ValueError('Layer type not recognised')
@@ -690,7 +693,6 @@ class BlockNEAT:
         
 
     def crossover(self, parents, population, path_to_minimal_individual):
-
         """
         Crossover two or more parents to produce an offspring
         """
@@ -704,89 +706,98 @@ class BlockNEAT:
         # Get all innovations/connections and all unique innovations/connections given the parent list
         all_innovations = []
         all_fitnesses = []
+        compatability_scores = []
 
-        parents = [population['individuals'][parent] for parent in parents]
+        for parent_1 in parents:
+            for parent_2 in parents:
+                if parent_1 != parent_2:
+                    compatability_scores.append(self.compatibility_distance(population['individuals'][parent_1], population['individuals'][parent_2]))
 
-        for parent in parents:
+        if np.sum(compatability_scores) > 0:
 
-            all_fitnesses.append(parent['scores']['fitness'])
+            parents = [population['individuals'][parent] for parent in parents]
 
-            for connection in list(parent['connections'].keys()):
+            for parent in parents:
 
-                all_innovations.append(connection)
-        
-        all_innovations_set = list(set(all_innovations))
+                all_fitnesses.append(parent['scores']['fitness'])
 
-        print_to_log('Crossover: all innovations: {}'.format(all_innovations))
+                for connection in list(parent['connections'].keys()):
 
-        # Loop through all unique innovations
-        for innovation in all_innovations_set:
-
-            print_to_log('Crossover: innovation: {}'.format(innovation))
-
-            # Count the number of times the innovation appears in all innovations
-            n_occurances = len([inno for inno in all_innovations if inno == innovation])
-
-            print_to_log('Crossover: number of occurances: {} and length of parents {}'.format(n_occurances, len(parents)))
+                    all_innovations.append(connection)
             
-            # Check if the number of appearances match the number of parents or if the fitnesses are all the same
-            if n_occurances == len(parents) or len(set(all_fitnesses)) == 1:
+            all_innovations_set = list(set(all_innovations))
 
-                # If the innovation exists in all parents then randomly select a parent to inherit the connection from
-                gene_parent = np.random.choice(parents)
+            print_to_log('Crossover: all innovations: {}'.format(all_innovations_set))
+            # Loop through all unique innovations
+            for innovation in all_innovations_set:
 
-            # If the innovation does not appear in all parents, select the parent with the highest fitness
+                print_to_log('Crossover: innovation: {}'.format(innovation))
+
+                # Count the number of times the innovation appears in all innovations
+                n_occurances = len([inno for inno in all_innovations if inno == innovation])
+
+                print_to_log('Crossover: number of occurances: {} and length of parents {}'.format(n_occurances, len(parents)))
+                
+                # Check if the number of appearances match the number of parents or if the fitnesses are all the same
+                if n_occurances == len(parents) or len(set(all_fitnesses)) == 1:
+
+                    # If the innovation exists in all parents then randomly select a parent to inherit the connection from
+                    gene_parent = np.random.choice(parents)
+
+                # If the innovation does not appear in all parents, select the parent with the highest fitness
+                else:
+                    max_fitness = 0
+                    for parent in parents:
+                        if parent['scores']['fitness'] >= max_fitness:
+                            max_fitness = parent['scores']['fitness']
+                            gene_parent = parent
+
+                print_to_log('Crossover: gene parent: {}'.format(gene_parent))
+
+                
+                # Inherit the connection from the selected parent
+
+                try:
+                    
+                    inherit_connection = gene_parent['connections'][innovation]
+                    offspring['connections'][innovation] = inherit_connection
+
+                    # Get node in and out of connection
+                    node_in = inherit_connection['in']
+                    node_out = inherit_connection['out']
+
+                    # Get the node information
+                    offspring['nodes'][node_in] = gene_parent['nodes'][node_in]
+                    offspring['nodes'][node_out] = gene_parent['nodes'][node_out]
+
+                    # print('Crossover: inherited connection {} from parent'.format(innovation))
+                    
+                # If there is no connection to inherit (no corresponding innovation), then skip to the next innovation, i.e. inherit nothing
+                except Exception as e:
+                    print_to_log(e)
+                    print_to_log('Crossover: no connection to inherit. Continuing to next innovation')
+                    continue
+
+            # pprint.pprint(offspring)
+
+            # Update local information for all nodes
+            offspring = self.update_nodes_local(offspring)
+
+            # Update global information for all nodes
+            offspring = self.update_nodes_global(offspring)
+
+            # Update meta data
+            offspring = self.update_meta_data(offspring)
+
+            # Check if the individual is continuous
+            if self.check_continuity(offspring):
+                return offspring
+            
             else:
-                max_fitness = 0
-                for parent in parents:
-                    if parent['scores']['fitness'] >= max_fitness:
-                        max_fitness = parent['scores']['fitness']
-                        gene_parent = parent
-
-            print_to_log('Crossover: gene parent: {}'.format(gene_parent))
-
+                return None
             
-            # Inherit the connection from the selected parent
-
-            try:
-                
-                inherit_connection = gene_parent['connections'][innovation]
-                offspring['connections'][innovation] = inherit_connection
-
-                # Get node in and out of connection
-                node_in = inherit_connection['in']
-                node_out = inherit_connection['out']
-
-                # Get the node information
-                offspring['nodes'][node_in] = gene_parent['nodes'][node_in]
-                offspring['nodes'][node_out] = gene_parent['nodes'][node_out]
-
-                # print('Crossover: inherited connection {} from parent'.format(innovation))
-                
-            # If there is no connection to inherit (no corresponding innovation), then skip to the next innovation, i.e. inherit nothing
-            except Exception as e:
-                print_to_log(e)
-
-                print_to_log('Crossover: no connection to inherit. Continuing to next innovation')
-                continue
-
-        # pprint.pprint(offspring)
-
-        # Update local information for all nodes
-        offspring = self.update_nodes_local(offspring)
-
-        # Update global information for all nodes
-        offspring = self.update_nodes_global(offspring)
-
-        # Update meta data
-        offspring = self.update_meta_data(offspring)
-
-        # Check if the individual is continuous
-        if self.check_continuity(offspring):
-            return offspring
-        
         else:
-            return None
+            return population['individuals'][parents[0]]
         
 
 
@@ -1120,7 +1131,7 @@ class BlockNEAT:
 
     
     
-    def speciation(self, population, delta_t = 4.0):
+    def speciation(self, population, delta_t = 3.0):
 
         """
         The population is divided into species based on the compatibility distance between individuals.
@@ -1144,14 +1155,14 @@ class BlockNEAT:
 
         assigned_individuals = []
 
+        species = population_copy['species'].keys()
+
         # Loop through all species and get a representative individual for each
-        for s in population_copy['species']:
+        for s in species:
 
-            print_to_log(f'Getting representative from species: {s}')
+            print_to_log(f'Getting representative from {s}')
 
-            species = population_copy['species']
-
-            print_to_log(f'Possible individuals in species {s}: {species}')
+            print_to_log(f'Possible individuals in {s}: {species}')
 
             representative = np.random.choice(population_copy['species'][s]['members'])
             population_copy['species'][s]['representative'] = representative
@@ -1177,10 +1188,12 @@ class BlockNEAT:
 
             print_to_log(f'__Selected individual to be assigned: {individual}')
 
-            # Loop through all species
-            for s in population_copy['species']:
+            incompatability_count = 0
 
-                print_to_log(f'____Checking if individual belongs in species {s}')
+            # Loop through all species
+            for s in species:
+
+                print_to_log(f'____Checking if {individual} belongs in species {s}')
 
                 # Get representative individual for the current species
                 representative = population_copy['species'][s]['representative']
@@ -1188,7 +1201,7 @@ class BlockNEAT:
                 # # If the current individual is not equal to the representative
                 # if individual != representative:
 
-                print_to_log('______Comparing individual to representative: {}'.format(representative))
+                print_to_log(f'______Comparing {individual} to representative ({representative})')
 
                 compatability_distance = self.compatibility_distance(population_copy['individuals'][individual], population_copy['individuals'][representative])
 
@@ -1207,15 +1220,18 @@ class BlockNEAT:
                 # If the compatibility distance between the current individual and the representative is greater than or equal to delta_t
                 else:
 
-                    # Create a new species with the current individual as the representative, add the current individual to the species and update its meta data
-                    new_species = 'species_{}'.format(len(population_copy['species']) + 1)
-                    population_copy['species'][new_species] = {'representative': individual, 'members': [individual]}
-                    population_copy['individuals'][individual]['meta_data']['species'] = new_species
+                    # Increment the incompatability count
+                    incompatability_count += 1
+                    continue
 
-                    print_to_log('______Creating new species {} with {}'.format(new_species, individual))
+            if incompatability_count == len(species):
+                # Create a new species with the current individual as the representative, add the current individual to the species and update its meta data
+                new_species = 'species_{}'.format(len(population_copy['species']) + 1)
+                population_copy['species'][new_species] = {'representative': individual, 'members': [individual]}
+                population_copy['individuals'][individual]['meta_data']['species'] = new_species
 
-                    # Break out of species loop since the current individual has been added to a new species, so need to loop through all species including new
-                    break
+                print_to_log('______Creating new species {} with {}'.format(new_species, individual))
+
 
         # Return the speciated population
         return population_copy
@@ -1266,8 +1282,6 @@ class BlockNEAT:
 
         population_copy = deepcopy(population)
 
-        fitness_species_sums = [np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']])) for s in species]
-
         # Calculate the sum of the shared fitness for the entire population
         population_fitness_sum = np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['individuals'].keys()]))
 
@@ -1275,20 +1289,38 @@ class BlockNEAT:
         
         species = list(population_copy['species'].keys())
 
+        n_members = np.array([len(population_copy['species'][s]['members']) for s in species])
+
         n_species = len(species)
 
-        n_individuals = self.population_size
+        # n_individuals = self.population_size
 
-        n_species_next_gen = np.min([np.floor(n_individuals / 2), n_species]) # Number of species cannot be greater than half the population size
+        n_species_next_gen = n_species # int(np.min([np.floor(n_individuals / 2), n_species])) # Number of species cannot be greater than half the population size
 
         fitness_species_sums = [np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']])) for s in species]
         
-        species = np.array(species)[np.argsort(fitness_species_sums)[::-1]][:n_species_next_gen]
-        fitness_species_sums = np.sort(fitness_species_sums)[::-1][:n_species_next_gen]
-        n_members = np.array([len(population_copy['species'][s]['members']) for s in species])
+        fitness_species_sums = np.where(n_members <= 2, 0, fitness_species_sums)
+        
+        if np.sum(fitness_species_sums) == 0:
+            arg_sorted_members = np.argsort(n_members)
+            n_members = np.array(n_members)[arg_sorted_members]
+            species = np.array(species)[arg_sorted_members]
+            fitness_species_sums = np.array(fitness_species_sums)[arg_sorted_members]
 
-        n_offspring = np.where(n_members <= 2, 1, 0)
-        n_offspring = np.where(fitness_species_sums == 0, 1, n_offspring)
+        else:
+            arg_sorted_fitness_species_sums = np.argsort(fitness_species_sums)
+            n_members = np.array(n_members)[arg_sorted_fitness_species_sums]
+            species = np.array(species)[arg_sorted_fitness_species_sums]
+            fitness_species_sums = np.array(fitness_species_sums)[arg_sorted_fitness_species_sums]
+
+        species = species[:n_species_next_gen]
+        fitness_species_sums = fitness_species_sums[:n_species_next_gen]
+
+        # fitness_species_sums = [np.sum(np.array([population_copy['individuals'][individual]['scores']['fitness_shared'] for individual in population_copy['species'][s]['members']])) for s in species]
+
+        n_offspring = np.where(n_members < 2, 1, 0)
+        n_offspring = np.where(n_members == 2, 2, n_offspring) # where there are two individuals in a species, two offspring are generated
+        # n_offspring = np.where(fitness_species_sums == 0, 1, n_offspring)
 
         print_to_log(f'Number of species in {species} is {n_species}')
         print_to_log('Species fitness sums: {}'.format(fitness_species_sums))
@@ -1318,13 +1350,22 @@ class BlockNEAT:
         
         # Loop through all species
         for i in range(n_species_next_gen):
+                
+            if fitness_species_sums[i] == 0 and n_members[i] > 2:
+                n_offspring[i] = n_members[i]
 
-            if n_offspring[::-1][i] == 0:
-                n_offspring[::-1][i] = np.ceil(fitness_species_sums[::-1][i] / np.sum(fitness_species_sums) * unassigned)
-                unassigned -= n_offspring[::-1][i]
+            else:
+                if n_offspring[i] == 0:
+                    n_offspring[i] = np.ceil(fitness_species_sums[i] / np.sum(fitness_species_sums) * unassigned)
+                    unassigned -= n_offspring[i]
 
-                if i == n_species_next_gen - 1:
-                    n_offspring[::-1][i] += unassigned
+                    if i == n_species_next_gen - 1:
+                        n_offspring[i] += unassigned
+
+            population_copy['species'][species[i]]['n_offspring'] = n_offspring[i]
+
+        print('species: ', species)
+        print('n_offspring: ', n_offspring)
 
             # Assign the number of offspring to be generated by the current species
             # in descending order of fitness, i.e. prioritise the highest fitness species
@@ -1383,7 +1424,7 @@ class BlockNEAT:
         subpopulation = {}
 
         # Loop through all species
-        for s in population_copy['species']:
+        for s in population_copy['species'].keys():
 
             # Get the members of the current species
             members = population_copy['species'][s]['members']
@@ -1554,7 +1595,7 @@ class BlockNEAT:
         self.val_accuracies.append(val_accuracy)
 
         if parameter_constraint is None:
-            beta = 0
+            beta = 0 # Not currently including the block parameters in the fitness score
             parameter_constraint = block_params
 
         elif parameter_constraint is not None:
@@ -1592,9 +1633,15 @@ class BlockNEAT:
         print_to_log(50*'_')
 
         generations = self.neat_parameters['block']['generation_limit']
+        initial_mutation_probability = self.neat_parameters['block']['mutation_probability']
+        minimum_mutation_probability = self.neat_parameters['block']['minimum_probability']
+
+        
 
         self.population = self.generate_initial_population(os.getcwd() + '/gblock/minimal_individual_structure.yaml', self.neat_parameters['block']['population_size'])
 
+        decay_constant = 1/self.population_size * np.log(minimum_mutation_probability/initial_mutation_probability)
+        
         self.block_params = []
         self.val_accuracies = []
         
@@ -1608,8 +1655,6 @@ class BlockNEAT:
         os.makedirs(dir + str(0), exist_ok = True)
 
         for g in range(1, generations + 1):
-
-            sys.stdout.flush()
 
             dir_gen = dir + str(g)
 
@@ -1641,12 +1686,22 @@ class BlockNEAT:
 
             for species in subpopulation.keys():
 
+                # offspring_count = 0
+                # offspring_none_count = 0
+
                 new_population['species'][species] = {'members': []}
 
                 parents_selected = []
 
+                print('Species: {}'.format(species))
 
-                while len(new_population['species'][species]['members']) < self.population['species'][species]['n_offspring']:
+                n_offspring = self.population['species'][species]['n_offspring']
+
+                while len(new_population['species'][species]['members']) < n_offspring:
+
+                    print('n_members: ', len(new_population['species'][species]['members']))
+
+                    print('n_offspring: ', self.population['species'][species]['n_offspring'])
 
                     if len(subpopulation[species]['members']) == 1:
                         parents = [subpopulation[species]['members'][0]]
@@ -1654,6 +1709,7 @@ class BlockNEAT:
                     else:
                         parents = self.parent_selection(subpopulation, species, n = 2)
 
+                    
                     # In order for this to work with a proportion smaller than 1, the number of combinations in
                     # the subpopulation needs to be greater than or equal to the number of offspring to be generated
                     # Including this check will ensure that the same parents are not selected twice, thus leading to duplicate 
@@ -1666,19 +1722,35 @@ class BlockNEAT:
                     # Two parents in a species can only produce one offspring (species shrinks)
                     # Three parents can only produce three offspring (species size stays the same)
                     # Four parents can only produce six offspring, etc. (potential for species to grow)
-                    if set(parents) not in parents_selected:
 
-                        parents_selected.append(set(parents))
+                    print('Parents: {}'.format(parents))
+                    print('Parents selected: {}'.format(parents_selected))
+                    if set(parents) not in parents_selected or (set(parents) in parents_selected and len(subpopulation[species]['members']) == 2):
 
-                        if len(parents) > 1:
-
+                        
+                        if set(parents) not in parents_selected and len(parents) > 1:
+                            parents_selected.append(set(parents))
                             offspring = self.crossover(parents, self.population, os.getcwd() + '/gblock/minimal_individual_structure.yaml')
 
+                        
                         else:
-                            offspring = deepcopy(self.population['individuals'][parents[0]])
+                            if len(parents) == 1:
+                                parents = [parents[0]]
+                                parents_selected.append(set(parents[0]))
+                                offspring = deepcopy(self.population['individuals'][parents[0]])
+
+                            else:
+                                fittest_parent = parents[np.argmax([self.population['individuals'][parent]['scores']['fitness'] for parent in parents])]
+                                parents = [fittest_parent]
+                                parents_selected.append(set(parents))
+                                offspring = deepcopy(self.population['individuals'][fittest_parent]) # Copy of fittest parent
 
                         
                         if offspring is not None:
+
+                            # offspring_count += 1
+
+                            mutation_probability = initial_mutation_probability * np.exp(decay_constant * g)
 
                             i += 1
 
@@ -1693,7 +1765,7 @@ class BlockNEAT:
                             # Repetition of code (can move to function)
                             r_node_mutate = np.random.uniform()
 
-                            if r_node_mutate < self.neat_parameters['block']['mutation_probability']:
+                            if r_node_mutate < mutation_probability:
 
                                 mutate_offspring = self.mutate_add_node(offspring)
 
@@ -1703,7 +1775,7 @@ class BlockNEAT:
 
                             r_connection_mutate = np.random.uniform()
 
-                            if r_connection_mutate < self.neat_parameters['block']['mutation_probability']:
+                            if r_connection_mutate < mutation_probability:
                                     
                                     mutate_offspring = self.mutate_add_connection(offspring)
 
@@ -1713,15 +1785,15 @@ class BlockNEAT:
 
                             r_switch_connection_mutate = np.random.uniform()
 
-                            if r_switch_connection_mutate < self.neat_parameters['block']['mutation_probability']:
+                            # Only start switching connections after 50% of generations have passed and is inversely probable when compared to node and connection mutation
+                            # The goal is to favour growth in the start and efficiency search toward the end
+                            if r_switch_connection_mutate < (initial_mutation_probability - mutation_probability) and g/(generations + 1) > 0.5:
                                     
                                     mutate_offspring = self.mutate_switch_connection(offspring)
 
                                     if mutate_offspring is not None:
 
                                         offspring = mutate_offspring
-
-
 
                             
                             offspring = self.build_layers(offspring, inputs = Input(shape = (28, 28, 1), name = 'node_input'))
@@ -1751,25 +1823,16 @@ class BlockNEAT:
 
                             new_population['individuals'][individual_id]['meta_data']['parents'] = set(parents)
 
+                        # else:
 
+                        #     offspring_none_count += 1
+
+                    # if offspring_count + offspring_none_count == n_offspring:
+
+                    #     self.population['species'][species]['n_offspring'] = offspring_count
+
+                    #     n_offspring = offspring_count
+                        
             self.previous_population = self.population
             
             self.population = new_population
-                    # Crossover
-                    # Mutation
-                    # Train
-                    # Evaluate
-                    # Update population
-
-                # parents = self.parent_selection(subpopulation, species, n = 2)
-
-                # # Crossover
-                # parents, path_to_minimal_individual
-
-                # Mutation
-
-                # Train
-
-                # Evaluate
-
-                # Update population
