@@ -1,10 +1,12 @@
 import numpy as np
+import graphviz
 from itertools import product, combinations
 import yaml
 from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Concatenate, AveragePooling2D, Flatten, Dense, BatchNormalization, SpatialDropout2D, GlobalAveragePooling2D
 from tensorflow.keras.layers import Layer, Model
 from tensorflow import Tensor
 import uuid
+from keras.datasets import mnist, cifar10
 
 np.random.seed(0)
 
@@ -209,6 +211,54 @@ class Graph:
                 valid_nodes.add(node)
 
         return valid_nodes
+
+class VisualiseBlock:
+    def __init__(self, graph: Graph, name: str, rankdir: str = 'LR', size: str = '10,5') -> None:
+        self.graph = graph
+        self.output_graph = graphviz.Digraph(name = name, format = "pdf")
+        self.output_graph.attr(rankdir = rankdir, size = size)
+        self.node_order = self.graph.breadth_first_search(self.graph.node_start, enabled_only = False)
+        self.valid_nodes = self.graph.update_valid_nodes(self.graph.node_start, self.graph.node_end)
+
+    def __repr__(self) -> str:
+        return str(self.graph)
+    
+    def draw_block(self) -> None:
+
+        for node in self.node_order:
+            if node in self.valid_nodes:
+
+                if node.node_type == "input" or node.node_type == "output":
+                    self.output_graph.attr(node.id, shape='box', color = 'black', label = node.node_type)
+                                           
+                elif node.node_type == 'Convolutional':
+                    self.output_graph.attr(node.id, shape='doublecircle', color = 'red', label = node.node_type[0]+'\n'+str(node.attributes['filters'])+str(node.attributes['kernel_size']))
+
+                elif node.node_type == 'Pooling':
+                    self.output_graph.attr(node.id, shape='trapezium', color = 'darkviolet', label = node.node_type[0]+'\n'+node.attributes['type'][0]+str(node.attributes['pool_size']), orientation='-90')
+
+                elif node.node_type == 'Dropout':
+                    self.output_graph.attr(node.id, shape='circle', color = 'deepskyblue', label = node.node_type[0]+'\n'+str(node.attributes['rate']))
+
+                else:
+                    raise ValueError("Node type not recognised")
+
+            # If the node is not a valid node then it is still drawn but greyed out
+            else:
+                self.output_graph.attr(node.id, shape='circle', color = 'lightgray', label = node.node_type[0])
+
+        # Draw the connections between the defined nodes
+        i = 1
+        for connection in self.graph.connections:
+            if connection.enabled and connection.node_in in self.valid_nodes and connection.node_out in self.valid_nodes:
+                self.output_graph.edge(connection.node_in.id, connection.node_out.id, style = 'solid', label = str(i))
+
+            else:
+                self.output_graph.edge(connection.node_in.id, connection.node_out.id, color = 'lightgray', style = 'dashed', label = str(i))
+
+            i += 1
+
+        self.output_graph.render(directory = 'graphs', format = 'pdf').replace('\\', '/')
 
 
 
@@ -739,3 +789,4 @@ class Network(Model):
             x = self.cell_block(x)
         x = self.output(x)
         return x
+    
