@@ -1,40 +1,41 @@
 import numpy as np
-import graphviz
 from itertools import product, combinations
 import yaml
+from keras.datasets import mnist, cifar10, cifar100
 from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Concatenate, AveragePooling2D, Flatten, Dense, BatchNormalization, SpatialDropout2D, GlobalAveragePooling2D
-from tensorflow.keras.layers import Layer, Model
+from tensorflow.keras.layers import Layer
+from tensorflow.keras.models import Model
+from keras.utils import plot_model, to_categorical
 from tensorflow import Tensor
 import uuid
-from keras.datasets import mnist, cifar10
 
 np.random.seed(0)
 
-class Node:
-    def __init__(self, id: str, node_type: str, attributes: dict = {}) -> None:
-        self.id = id
-        self.node_type = node_type
-        self.attributes = attributes
-        self.input_layer = None
-        self.layer = None
-        self.uuid = uuid.uuid4().hex
-
-    def __repr__(self) -> str:
-        return f"({self.id}, {self.node_type}, {self.attributes})"
-    
 
 class SearchSpace:
     def __init__(self, layers: list) -> None:
         self.layers = {}
+        self.local_layers = []
+        self.global_layers = []
         layers = layers.copy()
         for layer in layers:
             layer_type = layer.pop("layer_type")
+
+            layer_location = layer.pop("location")
+            if layer_location == "local":
+                self.local_layers.append(layer)
+            elif layer_location == "global":
+                self.global_layers.append(layer)
+            else:
+                raise ValueError(f"Invalid layer location. Must be one of ['local', 'global']")
+            
             id_count = 1
+            
             if "parameter_set_type" in layer.keys():
-                parameter_set_type = layer["parameter_set_type"]
+                parameter_set_type = layer.pop("parameter_set_type")
+                rounding = layer.pop("rounding")
                 for key, value in parameter_set_type.items():
                     if value == "continuous":
-                        rounding = layer["rounding"]
                         min_value = np.min(layer[key])
                         max_value = np.max(layer[key])
                         n_values = int((max_value - max_value)*10**rounding + 1)
@@ -55,9 +56,6 @@ class SearchSpace:
             else:
                 self.layers[layer_type] = [layer]
 
-        self.local_layers = [layer for layer in self.layers.keys() if layer["location"] == "local"]
-        self.global_layers = [layer for layer in self.layers.keys() if layer["location"] == "global"]
-
     def __repr__(self) -> str:
         return str(self.layers)
 
@@ -77,81 +75,134 @@ class LayersLoader:
             layers = yaml.safe_load(f)
 
         return SearchSpace(layers)
+    
+
+class Node:
+
+    node_instances = []
+
+    def __init__(self, node_type: str, attributes: dict = {}) -> None:
+        
+        self.node_type = node_type
+        self.attributes = attributes
+        self.input_layer = None
+        self.layer = None
+        self.graph = None
+        self.uuid = uuid.uuid4().hex
+        Node.node_instances.append(self)
+        self.id = '_'.join([self.node_type.lower(), str(len(Node.node_instances)), self.uuid[:4]])
+
+    def __repr__(self) -> str:
+        return f"({self.id}, {self.node_type}, {self.attributes})"
 
 
 class Connection:
+
+    connection_instances = []
+
     def __init__(self, node_in: Node, node_out: Node, enabled: bool = True) -> None:
         self.node_in = node_in
         self.node_out = node_out
         self.enabled = enabled
-        self.id = node_in.id + "_" + node_out.id
         self.uuid = uuid.uuid4().hex
+        Connection.connection_instances.append(self)
+        self.id = '_'.join([self.node_in.id, self.node_out.id, str(len(Connection.connection_instances)), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return f"({self.node_in}, {self.node_out}, {self.enabled})"
 
 
+ordered_nodes = list(set(my_graph.start_nodes))
+remaining_nodes = [node for node in set(my_graph.input_nodes) if node not in ordered_nodes]
+print(ordered_nodes)
+print(remaining_nodes)
+
+
+while len(remaining_nodes) > 0:
+    print(ordered_nodes)
+    print(remaining_nodes)
+    
+    node = remaining_nodes.pop(0)
+    print('_Node: ', node)
+    if set(node.input_layer).issubset(set(ordered_nodes)):
+        ordered_nodes.append(node)
+    
+    else:
+        remaining_nodes.append(node)
+
+    print('-----------------')
+
 class Graph:
-    def __init__(self, connections: list[Connection]) -> None:
+
+    graph_instances = []
+
+    def __init__(self, connections: list[Connection], name: str = 'graph') -> None:
         self.connections = connections
-        self.nodes_in = [connection.node_in for connection in connections]
-        self.nodes_out = [connection.node_out for connection in connections]
-        self.nodes = list(set(self.nodes_in + self.nodes_out))
-        self.node_start = self.nodes_in[0]
-        self.node_end = self.nodes_out[-1]
-        self.valid_nodes = self.update_valid_nodes(self.node_start, self.node_end)
         self.uuid = uuid.uuid4().hex
+        Graph.graph_instances.append(self)
+        self.id = '_'.join([name, str(len(Graph.graph_instances)), self.uuid[:4]])
+        self.update_graph_info()
 
     def __repr__(self) -> str:
         return f"{self.connections}"
+    
+    def update_graph_info(self) -> None:
+        self.nodes_in = [connection.node_in for connection in self.connections]
+        self.nodes_out = [connection.node_out for connection in self.connections]
+        self.nodes = list(set(self.nodes_in + self.nodes_out))
+        self.start_nodes = [connection.node_in for connection in self.connections if connection.node_in not in self.nodes_out]
+        self.end_nodes = [connection.node_out for connection in self.connections if connection.node_out not in self.nodes_in]
+        self.valid_nodes = self.update_valid_nodes(self.start_nodes, self.end_nodes)
+        self.input_nodes = []
+        for node in self.start_nodes:
+            self.input_nodes += self.get_node_inputs(node, visited=[])
+        self.order_input_nodes()
+
+    def order_input_nodes(self) -> None:
+        ordered_nodes = list(set(self.start_nodes))
+        remaining_nodes = [node for node in set(self.input_nodes) if node not in ordered_nodes]
+        while len(remaining_nodes) > 0:
+            node = remaining_nodes.pop(0)
+            if set(node.input_layer).issubset(set(ordered_nodes)):
+                ordered_nodes.append(node)
+            else:
+                remaining_nodes.append(node)
+        self.input_nodes = ordered_nodes
 
     def add_connection(self, connection: Connection) -> None:
-        self.nodes_in.append(connection.node_in)
-        self.nodes_out.append(connection.node_out)
-        self.connections.append(connection)
-        self.nodes = list(set(self.nodes_in + self.nodes_out))
+        if connection not in self.connections:
+            self.connections.append(connection)
+            self.update_graph_info()
+        else:
+            raise Warning(f"Connection {connection} already exists in graph {self.id} - cannot add duplicate connection")
 
     def delete_connection(self, connection: Connection) -> None:
-        self.nodes_in.remove(connection.node_in)
-        self.nodes_out.remove(connection.node_out)
-        self.connections.remove(connection)
-        self.nodes = list(set(self.nodes_in + self.nodes_out))
+        if connection in self.connections:
+            self.connections.remove(connection)
+            self.update_graph_info()
+        else:
+            raise Warning(f"Connection {connection} does not exist in graph {self.id} - cannot delete connection")
 
 
     def depth_first_search(self, node: Node, visited: set = set(), connected_nodes: set = set(), enabled_only: bool = True) -> list:
-        
         if node not in visited:
-
             visited.add(node)
-
             for connection in self.connections:
-
                 if connection.node_in == node and (connection.enabled or not enabled_only):
-
                     connected_nodes.add(connection.node_out)
-
                     self.depth_first_search(connection.node_out, visited, connected_nodes)
-
         return connected_nodes
     
     
     def breadth_first_search(self, node: Node, enabled_only: bool = True) -> list:
-
         queue = [node]
         visited = [node]
-
         while len(queue) > 0:
-
             node = queue.pop(0)
-
             for connection in self.connections:
-
                 if connection.node_in == node and (connection.enabled or not enabled_only):
-
                     visited.append(connection.node_out)
-
                     queue.append(connection.node_out)
-
         return visited
     
     
@@ -164,110 +215,62 @@ class Graph:
 
 
     def get_node_inputs(self, node: Node, visited: list = [], enabled_only: bool = True) -> list:
-        
         neighbours_out = self.get_node_neighbours_out(node = node, enabled_only = enabled_only)
-
         if node not in visited:
-
             for neighbour in neighbours_out:
-
                 if neighbour not in self.valid_nodes:
-
                     continue
-
                 neighbours_in = self.get_node_neighbours_in(node = neighbour, enabled_only = enabled_only)
-
                 neighbour.input_layer = [node_in for node_in in neighbours_in if node_in in self.valid_nodes]
-
                 self.get_node_inputs(neighbour, visited)
-
             visited.append(node)
-
         return visited[::-1]
 
 
-    def check_continuity(self, node_start: Node, node_end: Node) -> bool:
-
-        connected_nodes = self.depth_first_search(node_start, visited = set(), connected_nodes = set(), enabled_only = True)
-
+    def check_continuity(self, node_start: Node, node_end: Node, enabled_only: bool = True) -> bool:
+        connected_nodes = self.depth_first_search(node_start, visited = set(), connected_nodes = set(), enabled_only = enabled_only)
         return node_end in connected_nodes
     
     
-    def check_recursion(self, node: Node) -> bool:
-
-        connected_nodes = self.depth_first_search(node, visited = set(), connected_nodes = set(), enabled_only = True)
-
+    def check_recursion(self, node: Node, enabled_only = True) -> bool:
+        connected_nodes = self.depth_first_search(node, visited = set(), connected_nodes = set(), enabled_only = enabled_only)
         return node in connected_nodes
     
 
-    def update_valid_nodes(self, node_start: Node, node_end: Node) -> list:
-
-        valid_nodes = set([node_start, node_end])
-
-        for node in self.nodes:
-
-            if self.check_continuity(node_start, node) and self.check_continuity(node, node_end):
-
-                valid_nodes.add(node)
-
+    def update_valid_nodes(self, start_nodes: list[Node], end_nodes: list[Node]) -> list:
+        valid_nodes = set(start_nodes + end_nodes)
+        node_combinations = list(combinations(valid_nodes, 2))
+        for node_start, node_end in node_combinations:
+            for node in self.nodes:
+                if self.check_continuity(node_start, node) and self.check_continuity(node, node_end):
+                    valid_nodes.add(node)
         return valid_nodes
 
-class VisualiseBlock:
-    def __init__(self, graph: Graph, name: str, rankdir: str = 'LR', size: str = '10,5') -> None:
-        self.graph = graph
-        self.output_graph = graphviz.Digraph(name = name, format = "pdf")
-        self.output_graph.attr(rankdir = rankdir, size = size)
-        self.node_order = self.graph.breadth_first_search(self.graph.node_start, enabled_only = False)
-        self.valid_nodes = self.graph.update_valid_nodes(self.graph.node_start, self.graph.node_end)
 
-    def __repr__(self) -> str:
-        return str(self.graph)
-    
-    def draw_block(self) -> None:
-
-        for node in self.node_order:
-            if node in self.valid_nodes:
-
-                if node.node_type == "input" or node.node_type == "output":
-                    self.output_graph.attr(node.id, shape='box', color = 'black', label = node.node_type)
-                                           
-                elif node.node_type == 'Convolutional':
-                    self.output_graph.attr(node.id, shape='doublecircle', color = 'red', label = node.node_type[0]+'\n'+str(node.attributes['filters'])+str(node.attributes['kernel_size']))
-
-                elif node.node_type == 'Pooling':
-                    self.output_graph.attr(node.id, shape='trapezium', color = 'darkviolet', label = node.node_type[0]+'\n'+node.attributes['type'][0]+str(node.attributes['pool_size']), orientation='-90')
-
-                elif node.node_type == 'Dropout':
-                    self.output_graph.attr(node.id, shape='circle', color = 'deepskyblue', label = node.node_type[0]+'\n'+str(node.attributes['rate']))
-
-                else:
-                    raise ValueError("Node type not recognised")
-
-            # If the node is not a valid node then it is still drawn but greyed out
-            else:
-                self.output_graph.attr(node.id, shape='circle', color = 'lightgray', label = node.node_type[0])
-
-        # Draw the connections between the defined nodes
-        i = 1
-        for connection in self.graph.connections:
-            if connection.enabled and connection.node_in in self.valid_nodes and connection.node_out in self.valid_nodes:
-                self.output_graph.edge(connection.node_in.id, connection.node_out.id, style = 'solid', label = str(i))
-
-            else:
-                self.output_graph.edge(connection.node_in.id, connection.node_out.id, color = 'lightgray', style = 'dashed', label = str(i))
-
-            i += 1
-
-        self.output_graph.render(directory = 'graphs', format = 'pdf').replace('\\', '/')
-
+class CombinedGraph(Graph):
+    def __init__(self, graphs: list[Graph]) -> None:
+        self.connections = [graph.connections for graph in graphs]
+        i = 0
+        max_len = 2*len(self.connections) - 1
+        while len(self.connections)  < max_len:
+            new_connection = [Connection(self.connections[i][-1].node_out, self.connections[i+1][0].node_in, True)]
+            self.connections.insert(i+1, new_connection)
+            i += 2
+        self.connections = [connection for connections in self.connections for connection in connections]
+        return super().__init__(self.connections, name = 'combined_graph')
+        
 
 
 class Individual:
-    def __init__(self, id: str, graph: Graph) -> None:
+
+    individual_instances = []
+
+    def __init__(self, graph: Graph) -> None:
         self.graph = graph
-        self.id = id
-        self.uuid = uuid.uuid4().hex
         self.fitness = 0.5
+        self.uuid = uuid.uuid4().hex
+        Individual.individual_instances.append(self)
+        self.id = '_'.join([len(Individual.individual_instances), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return str(self.graph)
@@ -400,9 +403,8 @@ class Species:
         return len(individual_connections.symmetric_difference(representative_connections))/(len(individual_connections) + len(representative_connections))
 
 
-
 class Population:
-    def __init__(self, species: list, node_start: Node, node_end: Node, id: str, generation: str) -> None:
+    def __init__(self, species: list, node_start: Node, node_end: Node, id: str, generation: int) -> None:
         self.species = species
         self.species_fitness = [species.fitness_shared for species in self.species]
         self.total_fitness_shared = np.sum(self.species_fitness)
@@ -432,9 +434,42 @@ class Population:
         else:
             connection.innovation_number = self.connections.index(connection)
 
-    def generate_new_population(self, n_individuals: int, initialisation_type: str = 'minimal', nodes: list = [], n_connections: int = 0) -> None:
 
+    def speciation(self, delta_t: int) -> None:
+        species_sorted = sorted(self.species, key=lambda species: species.fitness_shared, reverse=True)
+        representatives = [species.representative for species in species_sorted]
+        unassigned_individuals = [individual for individual in self.individuals if individual not in representatives]
+        
+        while len(unassigned_individuals) > 0:
+            individual = unassigned_individuals[0]
+
+            for species in species_sorted:
+                if species.compatability_distance(individual) < delta_t and individual not in species.individuals:
+                    species.add_individual(individual)
+                    unassigned_individuals.remove(individual)
+
+
+                elif species.compatability_distance(individual) > delta_t and individual in species.individuals:
+                    species.remove_individual(individual)
+
+
+            if individual in unassigned_individuals:
+                species_sorted.append(Species([individual], self.base_id + f".s{len(species_sorted)}"))
+                unassigned_individuals.remove(individual)
+
+        
+        species_sorted = [Species(species.individuals, self.base_id + f".s{i}") for i, species in enumerate(species_sorted)]
+        self.__init__(species_sorted, self.node_start, self.node_end, self.id, self.generation + 1)
+
+
+class NewPopulation:
+    def __init__(self, node_start: Node, node_end: Node, n_individuals: int, initialisation_type: str = 'minimal', nodes: list = [], n_connections: int = 0) -> None:
+
+        self.node_start = node_start
+        self.node_end = node_end
         self.individuals = []
+        self.n_individuals = n_individuals
+        self.base_id = f"s{self.node_start.id}.e{self.node_end.id}.g{0}.p{0}"
         new_pop_id = self.base_id + f".s{0}"
 
         if initialisation_type == 'minimal':
@@ -476,34 +511,7 @@ class Population:
         
         self.population_size = n_individuals
         self.species = [Species(self.individuals, new_pop_id)]
-        self.__init__(self.species, self.node_start, self.node_end, self.id, '0')
-
-
-    def speciation(self, delta_t: int) -> None:
-        species_sorted = sorted(self.species, key=lambda species: species.fitness_shared, reverse=True)
-        representatives = [species.representative for species in species_sorted]
-        unassigned_individuals = [individual for individual in self.individuals if individual not in representatives]
-        
-        while len(unassigned_individuals) > 0:
-            individual = unassigned_individuals[0]
-
-            for species in species_sorted:
-                if species.compatability_distance(individual) < delta_t and individual not in species.individuals:
-                    species.add_individual(individual)
-                    unassigned_individuals.remove(individual)
-
-
-                elif species.compatability_distance(individual) > delta_t and individual in species.individuals:
-                    species.remove_individual(individual)
-
-
-            if individual in unassigned_individuals:
-                species_sorted.append(Species([individual], self.base_id + f".s{len(species_sorted)}"))
-                unassigned_individuals.remove(individual)
-
-        
-        species_sorted = [Species(species.individuals, self.base_id + f".s{i}") for i, species in enumerate(species_sorted)]
-        self.__init__(species_sorted, self.node_start, self.node_end, self.id, self.generation + 1)
+        return Population(self.species, self.node_start, self.node_end, '0', 0)
         
 
 
@@ -701,92 +709,85 @@ class Crossover:
     
 
 
-class InputLayer(Layer):
-    def __init__(self, input_shape: tuple, n_filters: int = 16, kernel_size: tuple = (3,3), activation: str = 'relu', padding: str = 'same') -> None:
+class BuildLayer(Layer):
+    def __init__(self, graph: Graph) -> None:
         super().__init__()
-        self.input_layer = Input(shape=input_shape)
-        self.conv = Conv2D(n_filters, kernel_size, activation, padding)
-        self.batch_norm = BatchNormalization()
-
-    def call(self, inputs: Tensor) -> Tensor:
-        x = self.input_layer(inputs)
-        x = self.conv(x)
-        x = self.batch_norm(x)
-        return x
-
-
-
-class CellBlock(Layer):
-    def __init__(self, nodes: list[Node]) -> None:
-        super().__init__()
-        self.nodes = nodes
-        for node in self.nodes:
-            if node.node_type == 'Convolutional':
-                filters = node.attributes["filters"]
-                kernel_size = (node.attributes["kernel_size"], node.attributes["kernel_size"])
-                strides = (node.attributes["strides"], node.attributes["strides"])
-                padding = node.attributes["padding"]
-                activation = node.attributes["activation"]
-                node.layer = Conv2D(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding, activation=activation)
-
-            elif node.node_type == 'Pooling':
-                pool_size = (node.attributes["pool_size"], node.attributes["pool_size"])
-                strides = (node.attributes["strides"], node.attributes["strides"])
-                padding = node.attributes["padding"]
-
-                if node.attributes["type"] == "AveragePooling2D" or node.attributes["type"].lower() in "average":
-                    node.layer = AveragePooling2D(pool_size=pool_size, strides=strides, padding=padding)
-                
-                elif node.attributes["type"] == "MaxPooling2D" or node.attributes["type"].lower() in "maximum":
-                    node.layer = MaxPooling2D(pool_size=pool_size, strides=strides, padding=padding)
-
-                else:
-                    raise ValueError("Invalid pooling type. Must be either AveragePooling2D or MaxPooling2D")
-                
-            elif node.node_type == 'Dropout':
-                node.layer = SpatialDropout2D(rate = node.attributes["rate"])
-
+        self.graph = graph
+        self.input_nodes = self.graph.get_node_inputs(self.graph.node_start, visited=[], enabled_only=True)
+        self.params = 0
+        for node in self.input_nodes:
+            if node.node_type == 'Conv2D':
+                node.layer = Conv2D(**node.attributes)
+            elif node.node_type == 'BatchNormalization':
+                node.layer = BatchNormalization()
+            elif node.node_type == 'Dense':
+                node.layer = Dense(**node.attributes)
+            elif node.node_type == 'MaxPooling2D':
+                node.layer = MaxPooling2D(**node.attributes)
+            elif node.node_type == 'AveragePooling2D':
+                node.layer = AveragePooling2D(**node.attributes)
+            elif node.node_type == 'SpatialDropout2D':
+                node.layer = SpatialDropout2D(**node.attributes)
+            elif node.node_type == 'GlobalAveragePooling2D':
+                node.layer = GlobalAveragePooling2D()
+            elif node.node_type == 'Flatten':
+                node.layer = Flatten()
+            elif node.node_type == 'Output':
+                pass
             else:
-                raise ValueError("Invalid node type. Must be either Convolutional, Pooling or Dropout")
+                raise ValueError("Node type must be one of 'Conv2D', 'BatchNormalization', 'Dense', 'MaxPooling2D', 'AveragePooling2D', 'SpatialDropout2D', 'GlobalAveragePooling2D', 'Flatten', 'Output'")
             
-    def call(self, inputs: Tensor) -> Tensor:
+    def get_layers(self):
+        layers = []
+        for node in self.input_nodes:
+            if hasattr(node, 'layer'):
+                layers.append(node.layer)
+        return layers
+    
+    def count_params(self):
+        params = 0
+        for layer in self.get_layers():
+            params += layer.count_params()
+        self.params = params
+    
+    def call(self, inputs):
         x = inputs
-        for node in self.nodes:
-            if len(node.input_layer) == 1:
-                x = node.layer(x)
-
-            else:
-                x = Concatenate()([node.layer for node in node.input_layer])
-                x = node.layer(x)
-
-        return x
-
-class Output(Layer):
-    def __init__(self, n_classes:int) -> None:
-        super().__init__()
-        self.batch_norm = BatchNormalization()
-        self.global_avg = GlobalAveragePooling2D()
-        self.output_layer = Dense(n_classes, activation='softmax')
-
-    def call(self, inputs: Tensor) -> Tensor:
-        x = self.batch_norm(inputs)
-        x = self.global_avg(x)
-        x = self.output_layer(x)
+        for node in self.input_nodes:
+            if len(node.input_layer) > 1 if node.input_layer != None else False:
+                x = Concatenate()([node.layer(x) for node in node.input_layer])
+            x = node.layer(x)      
         return x
     
 
-class Network(Model):
-    def __init__(self, input_shape: tuple, nodes: list[Node], n_classes: int, n_cells: int) -> None:
+class BuildModel(Model):
+    def __init__(self, graphs: list[Graph]) -> None:
         super().__init__()
-        self.input_layer = InputLayer(input_shape)
-        self.cell_block = CellBlock(nodes)
-        self.output = Output(n_classes)
-        self.n_cells = n_cells
+        self.graphs = graphs
+        for graph in graphs:
+            setattr(self, graph.node_start.id, BuildLayer(graph))
 
-    def call(self, inputs: Tensor) -> Tensor:
-        x = self.input_layer(inputs)
-        for _ in range(self.n_cells):
-            x = self.cell_block(x)
-        x = self.output(x)
-        return x
+
+    def count_params(self):
+        params = 0
+        for graph in self.graphs:
+            getattr(self, graph.node_start.id).count_params()
+            params += getattr(self, graph.node_start.id).params
+        self.params = params
+        return params
+
     
+    def call(self, inputs):
+        x = inputs
+        for graph in self.graphs:
+            x = getattr(self, graph.node_start.id)(x)
+        return x
+
+
+
+class EvolveBlock:
+    def __init__(self, n_pop) -> None:
+        pass # self, species: list, node_start: Node, node_end: Node, id: str, generation: str
+
+
+    def run_evolution(self):
+        self.population = NewPopulation(self)
