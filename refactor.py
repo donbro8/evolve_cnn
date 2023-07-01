@@ -90,7 +90,7 @@ class Node:
         self.graph = None
         self.uuid = uuid.uuid4().hex
         Node.node_instances.append(self)
-        self.id = '_'.join([self.node_type.lower(), str(len(Node.node_instances)), self.uuid[:4]])
+        self.id = '_'.join(['node', self.node_type.lower(), str(len(Node.node_instances)), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return f"({self.id}, {self.node_type}, {self.attributes})"
@@ -106,41 +106,22 @@ class Connection:
         self.enabled = enabled
         self.uuid = uuid.uuid4().hex
         Connection.connection_instances.append(self)
-        self.id = '_'.join([self.node_in.id, self.node_out.id, str(len(Connection.connection_instances)), self.uuid[:4]])
+        self.id = '_'.join(['connection', self.node_in.id, self.node_out.id, str(len(Connection.connection_instances)), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return f"({self.node_in}, {self.node_out}, {self.enabled})"
 
 
-ordered_nodes = list(set(my_graph.start_nodes))
-remaining_nodes = [node for node in set(my_graph.input_nodes) if node not in ordered_nodes]
-print(ordered_nodes)
-print(remaining_nodes)
-
-
-while len(remaining_nodes) > 0:
-    print(ordered_nodes)
-    print(remaining_nodes)
-    
-    node = remaining_nodes.pop(0)
-    print('_Node: ', node)
-    if set(node.input_layer).issubset(set(ordered_nodes)):
-        ordered_nodes.append(node)
-    
-    else:
-        remaining_nodes.append(node)
-
-    print('-----------------')
 
 class Graph:
 
     graph_instances = []
 
-    def __init__(self, connections: list[Connection], name: str = 'graph') -> None:
+    def __init__(self, connections: list[Connection]) -> None:
         self.connections = connections
         self.uuid = uuid.uuid4().hex
         Graph.graph_instances.append(self)
-        self.id = '_'.join([name, str(len(Graph.graph_instances)), self.uuid[:4]])
+        self.id = '_'.join(['graph', str(len(Graph.graph_instances)), self.uuid[:4]])
         self.update_graph_info()
 
     def __repr__(self) -> str:
@@ -245,10 +226,65 @@ class Graph:
                 if self.check_continuity(node_start, node) and self.check_continuity(node, node_end):
                     valid_nodes.add(node)
         return valid_nodes
+    
+    def get_random_connection(self, enabled_only: bool = True) -> Connection:
+        connections = [connection for connection in self.connections if connection.enabled or not enabled_only]
+        return np.random.choice(connections)
+    
+    def get_random_node(self) -> Node:
+        return np.random.choice(self.nodes)
+    
+
+class RandomGraph(Graph):
+    def __init__(self, nodes: list[Node], connection_density: float = 0.5) -> None:
+        if len(nodes) > 1:
+            self.nodes = nodes
+            self.connections = []
+            possible_connections = list(combinations(self.nodes, 2))
+            max_possible_connections = len(possible_connections)
+            np.random.shuffle(possible_connections)
+            while len(self.connections) < np.ceil(connection_density*max_possible_connections):
+                node_in, node_out = possible_connections.pop(0)
+                connection = Connection(node_in, node_out, enabled = True)
+                self.connections.append(connection)
+            return super().__init__(self.connections)
+        else:
+            raise ValueError(f"Cannot create random graph with {len(nodes)} nodes - must have at least 2 nodes")
 
 
+# The idea here is to have hierarchical graphs, where each node is a graph in itself
+# The network can be structured as a graph of graphs, where each node is a graph
+# An unpacked graph is a graph where all of the nodes are no longer graphs
+# The depth of a node/layer is the maximum depth of any node in the graph, i.e. the number of subgraphs for a node
+# e.g Network -> Nodes has a depth of 0
+# e.g Network -> Subgraph Level 1 -> Node has a depth of 1
+# e.g Network -> Subgraph Level 1 -> Subgraph Level 2 -> Node has a depth of 2
+# e.g Network -> Subgraph Level 1 -> Subgraph Level 2 -> Subgraph Level 3 -> Node has a depth of 3
+# Example:
+#   Network Level 0: Network = Single Node with no connections that is a graph
+#   Graph Level 1: Node 1 = Input -> Node 2 = Hidden -> Node 3 = Output
+#       Node 1 Node Level 2: [(C1, BN1)], => max depth = 2
+#       Node 2 Graph Level 2: [(B1, B2), (B1, B3)]
+#           B1 Node Level 3: [(C1, C2), (C1, C3), (C1, P1)] => max depth = 3
+#           B2 Node Level 3: [(C2, C3), (C2, P1)] => max depth = 3
+#           B3 Node Level 3: [(C3, P1)] => max depth = 3
+#       Node 3 Graph Level 2: [(D1, D2)] => max depth = 2
+class UnpackGraph(Graph):
+    def __init__(self, graph: Graph) -> None:
+        for node in graph.nodes:
+            if node.graph == None:
+                pass
+            else:
+                pass
+        self.nodes = graph.nodes
+        self.connections = graph.connections
+        return super().__init__(self.connections, name = 'unpacked_graph')
+
+
+# Currently setup for a linear connection of graphs, ordered from left to right
 class CombinedGraph(Graph):
     def __init__(self, graphs: list[Graph]) -> None:
+        self.nodes = [node for graph in graphs for node in graph.input_nodes]
         self.connections = [graph.connections for graph in graphs]
         i = 0
         max_len = 2*len(self.connections) - 1
@@ -270,98 +306,110 @@ class Individual:
         self.fitness = 0.5
         self.uuid = uuid.uuid4().hex
         Individual.individual_instances.append(self)
-        self.id = '_'.join([len(Individual.individual_instances), self.uuid[:4]])
+        self.id = '_'.join(['individual', len(Individual.individual_instances), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return str(self.graph)
 
 
-    def generate_minimal_individual(self, node_start: Node, node_end: Node) -> None:
-        self.graph = Graph([Connection(node_start, node_end, True)])
-        self.__init__(self.id, self.graph)
+    # def generate_minimal_individual(self, node_start: Node, node_end: Node) -> None:
+    #     self.graph = Graph([Connection(node_start, node_end, True)])
+    #     self.__init__(self.id, self.graph)
 
 
-    def possible_connections(self, nodes: list) -> list:
-        return [(node_in, node_out) for node_in, node_out in product(self.graph.nodes, nodes) if node_in != node_out]
+    # def possible_connections(self, nodes: list) -> list:
+    #     return [(node_in, node_out) for node_in, node_out in product(self.graph.nodes, nodes) if node_in != node_out]
     
-    def max_connections(self, nodes: list) -> int:
-        n_nodes = len(set(nodes))
-        return int((n_nodes - 1)*n_nodes/2)
+    # def max_connections(self, nodes: list) -> int:
+    #     n_nodes = len(set(nodes))
+    #     return int((n_nodes - 1)*n_nodes/2)
 
 
-    def generate_random_individual(self, node_start: Node, node_end: Node, nodes: list, n_connections: int) -> None:
+    # Generate random graph now instead of random individual
+    # Pass random graph to individual once generated
+    # def generate_random_individual(self, node_start: Node, node_end: Node, nodes: list, n_connections: int) -> None:
 
-        self.graph = Graph([])
+    #     self.graph = Graph([])
 
-        possible_connections = self.possible_connections([node_start] + nodes, nodes + [node_end])
+    #     possible_connections = self.possible_connections([node_start] + nodes, nodes + [node_end])
 
-        n_nodes = len(set([node_start] + nodes + [node_end]))
+    #     n_nodes = len(set([node_start] + nodes + [node_end]))
 
-        max_possible_connections = self.max_connections([node_start] + nodes + [node_end])
+    #     max_possible_connections = self.max_connections([node_start] + nodes + [node_end])
 
-        if n_connections > max_possible_connections:
-            print(f"Warning: Number of connections ({n_connections}) exceeds maximum possible ({max_possible_connections}). Setting number of connections to maximum possible.")
-            n_connections = (np.min([n_connections, int((n_nodes - 1)*n_nodes/2)]))
+    #     if n_connections > max_possible_connections:
+    #         print(f"Warning: Number of connections ({n_connections}) exceeds maximum possible ({max_possible_connections}). Setting number of connections to maximum possible.")
+    #         n_connections = (np.min([n_connections, int((n_nodes - 1)*n_nodes/2)]))
 
-        while n_connections > 0:
+    #     while n_connections > 0:
 
-            if n_connections == 1 and not self.graph.check_continuity(node_start, node_end) and len(self.graph.connections) > 0:
-                connection = np.random.choice(self.graph.connections)
-                self.graph.delete_connection(connection)
-                possible_connections.append((connection.node_in, connection.node_out))
-                n_connections += 1
+    #         if n_connections == 1 and not self.graph.check_continuity(node_start, node_end) and len(self.graph.connections) > 0:
+    #             connection = np.random.choice(self.graph.connections)
+    #             self.graph.delete_connection(connection)
+    #             possible_connections.append((connection.node_in, connection.node_out))
+    #             n_connections += 1
 
-            else:
+    #         else:
 
-                node_in, node_out = possible_connections[np.random.randint(0, len(possible_connections))]
+    #             node_in, node_out = possible_connections[np.random.randint(0, len(possible_connections))]
 
-                if ((node_in, node_out) not in [(self.graph.nodes_in[i], self.graph.nodes_out[i]) for i in range(len(self.graph.connections))]):
+    #             if ((node_in, node_out) not in [(self.graph.nodes_in[i], self.graph.nodes_out[i]) for i in range(len(self.graph.connections))]):
 
-                    self.graph.add_connection(Connection(node_in, node_out, True))
+    #                 self.graph.add_connection(Connection(node_in, node_out, True))
 
-                    if self.graph.check_recursion(node_in) or self.graph.check_recursion(node_out) or not self.graph.check_continuity(node_start, node_end):
-                        self.graph.delete_connection(self.graph.connections[-1])
+    #                 if self.graph.check_recursion(node_in) or self.graph.check_recursion(node_out) or not self.graph.check_continuity(node_start, node_end):
+    #                     self.graph.delete_connection(self.graph.connections[-1])
 
-                    else:
-                        possible_connections.remove((node_in, node_out))
-                        n_connections -= 1
+    #                 else:
+    #                     possible_connections.remove((node_in, node_out))
+    #                     n_connections -= 1
 
-        self.__init__(self.id, self.graph)
+    #     self.__init__(self.id, self.graph)
 
 
-    def get_random_connection(self) -> Connection:
-        return np.random.choice(self.graph.connections)
+    # def get_random_connection(self) -> Connection:
+    #     return np.random.choice(self.graph.connections)
     
-    def get_random_node(self, nodes: list) -> Node:
-        return np.random.choice(nodes)
+    # def get_random_node(self, nodes: list) -> Node:
+    #     return np.random.choice(nodes)
 
 
 class Species:
-    def __init__(self, individuals: list, id: str) -> None:
-        self.individuals = individuals
-        self.n_individuals = len(individuals)
-        self.fitness_shared = np.sum([individual.fitness for individual in self.individuals])/self.n_individuals
-        self.id = id
+
+    species_instances = []
+
+    def __init__(self, members: list[Individual]) -> None:
+        self.members = members
+        self.update_species_info()
+        self.get_new_representative()
         self.uuid = uuid.uuid4().hex
-        self.representative = np.random.choice(individuals)
+        Species.species_instances.append(self)
+        self.id = '_'.join(['species', len(Species.species_instances) - 1, self.uuid[:4]])
 
 
     def __repr__(self) -> str:
-        return f"Species ID: {self.id} | Members: {self.individuals} | Representative: {self.representative} | Total individuals: {self.n_individuals} | Shared fitness: {self.fitness_shared}"
+        return f"Species ID: {self.id} | Members: {self.members} | Representative: {self.representative} | Total members: {self.n_members} | Shared fitness: {self.fitness_shared}"
     
+    def update_species_info(self) -> None:
+        self.n_members = len(self.members)
+        self.fitness_shared = np.sum([member.fitness for member in self.members])/self.n_members
     
-    def add_individual(self, individual: Individual) -> None:
-        self.individuals.append(individual)
-        self.n_individuals += 1
-        self.fitness_shared = np.sum([individual.fitness for individual in self.individuals])/self.n_individuals
+    def add_member(self, individual: Individual) -> None:
+        if individual not in self.members:
+            self.members.append(individual)
+            self.update_species_info()
+        else:
+            print(f"Warning: Individual {individual} already in species {self}.")
 
-    def remove_individual(self, individual: Individual) -> None:
-        self.individuals.remove(individual)
-        self.n_individuals -= 1
-        self.fitness_shared = np.sum([individual.fitness for individual in self.individuals])/self.n_individuals
+    def remove_member(self, individual: Individual) -> None:
+        if individual in self.members:
+            self.members.remove(individual)
+            self.update_species_info()
+        else:
+            print(f"Warning: Individual {individual} not in species {self}.")
 
     def get_new_representative(self) -> None:
-        self.representative = np.random.choice(self.individuals)
+        self.representative = np.random.choice(self.members)
     
     def excess_connections(self, individual: Individual) -> int:
         return np.abs(len(individual.graph.connections) - len(self.representative.graph.connections))
@@ -380,7 +428,7 @@ class Species:
         return len(individual_connections.symmetric_difference(representative_connections))
     
     
-    def compatability_distance(self, individual: Individual, enabled_only: bool = True) -> float:
+    def compatability_distance(self, individual: Individual, enabled_only: bool = False) -> float:
 
         # (c1 * self.excess_connections(individual) + c2 * self.disjoint_connections(individual, enabled_only)) / n + c3 * np.abs(self.representative.fitness - individual.fitness)
 
@@ -390,7 +438,7 @@ class Species:
 
         # Two individuals might be similar with respect to all connections, but may behave wildly differently is some of those connections are turned off
         # Therefore, we can also measure compatability distance with respect to only enabled connections
-        # Still need to figure out how to weight this
+        # Still need to figure out how to weight this (default is kept as False)
 
         if enabled_only:
             individual_connections = set([connection for connection in individual.graph.connections if connection.enabled])
@@ -403,115 +451,166 @@ class Species:
         return len(individual_connections.symmetric_difference(representative_connections))/(len(individual_connections) + len(representative_connections))
 
 
-class Population:
-    def __init__(self, species: list, node_start: Node, node_end: Node, id: str, generation: int) -> None:
-        self.species = species
-        self.species_fitness = [species.fitness_shared for species in self.species]
-        self.total_fitness_shared = np.sum(self.species_fitness)
-        self.individuals = [individual for species in self.species for individual in species.individuals]
-        self.population_size = len(self.individuals)
-        self.node_start = node_start
-        self.node_end = node_end
-        self.id = id
-        self.uuid = uuid.uuid4().hex
-        self.generation = generation
-        self.base_id = f"s{self.node_start.id}.e{self.node_end.id}.g{self.generation}.p{self.id}"
-        self.n_species = len(species.individuals)
-        self.connections = list(set([connection for individual in self.individuals for connection in individual.graph.connections]))
-        self.nodes = list(set([node for individual in self.individuals for node in individual.graph.nodes]))
-
-        for connection in self.connections:
-            self.get_innovation_number(connection)
-
-
-    def __repr__(self) -> str:
-        return f"Population ID: {self.id} | Start node: {self.node_start.id} | End node: {self.node_end.id} | Number of species: {self.n_species}"
-    
-    
-    def get_innovation_number(self, connection: Connection) -> None:
-        if connection not in self.connections:
-            connection.innovation_number = len(self.connections) + 1
-        else:
-            connection.innovation_number = self.connections.index(connection)
-
-
-    def speciation(self, delta_t: int) -> None:
-        species_sorted = sorted(self.species, key=lambda species: species.fitness_shared, reverse=True)
-        representatives = [species.representative for species in species_sorted]
-        unassigned_individuals = [individual for individual in self.individuals if individual not in representatives]
-        
+class Speciation(Species):
+    def __init__(self, species: list[Species], delta_t: float = 0.5) -> list[Species]:
+        self.species = sorted(species, key=lambda species: species.fitness_shared, reverse=True)
+        self.delta_t = delta_t
+        self.individuals = [individual for species in self.species for individual in species.members]
+        self.representatives = [species.representative for species in self.species]
+        unassigned_individuals = [individual for individual in self.individuals if individual not in self.representatives]
         while len(unassigned_individuals) > 0:
             individual = unassigned_individuals[0]
-
-            for species in species_sorted:
-                if species.compatability_distance(individual) < delta_t and individual not in species.individuals:
-                    species.add_individual(individual)
+            for species in self.species:
+                if species.compatability_distance(individual) < delta_t and individual not in species.members:
+                    species.add_member(individual)
                     unassigned_individuals.remove(individual)
-
-
-                elif species.compatability_distance(individual) > delta_t and individual in species.individuals:
-                    species.remove_individual(individual)
-
-
+                elif species.compatability_distance(individual) >= delta_t and individual in species.members:
+                    species.remove_member(individual)
             if individual in unassigned_individuals:
-                species_sorted.append(Species([individual], self.base_id + f".s{len(species_sorted)}"))
+                new_species = super().__init__([individual])
+                self.species.append(new_species)
+                self.species = sorted(species, key=lambda species: species.fitness_shared, reverse=True)
                 unassigned_individuals.remove(individual)
+        return self.species
 
+
+class Population:
+
+    population_instances = []
+
+    def __init__(self, species: list[Species]) -> None:
+        self.species = species
+        self.update_population_info()
+        self.uuid = uuid.uuid4().hex
+        Population.population_instances.append(self)
+        self.id = '_'.join(['population', len(Population.population_instances) - 1, self.uuid[:4]])
+
+    def __repr__(self) -> str:
+        return f"Population ID: {self.id} | Individuals: {self.individuals} | Species: {self.species} | Total individuals: {self.population_size} | Total species: {self.n_species} | Total fitness: {self.total_fitness} | Average fitness: {self.average_fitness}"
+
+    def update_population_info(self) -> None:
+        self.species_fitness = [species.fitness_shared for species in self.species]
+        self.total_fitness_shared = np.sum(self.species_fitness)
+        self.n_species = len(self.species)
+        self.individuals = [individual for species in self.species for individual in species.members]
+        self.population_size = len(self.individuals)
+        self.total_fitness = np.sum([individual.fitness for individual in self.individuals])
+        self.average_fitness = self.total_fitness/self.population_size
+
+    # def get_innovation_number(self, connection: Connection) -> None:
+    #     if connection not in self.connections:
+    #         connection.innovation_number = len(self.connections) + 1
+    #     else:
+    #         connection.innovation_number = self.connections.index(connection)
+    
+class CustomPopulationInitiliser(Population):
+    def __init__(self, population_size: int, graphs: list[Graph]):
+        self.population_size = population_size
+        self.graphs = graphs
+
+    def __repr__(self) -> str:
+        return f"Population ID: {self.id} | Individuals: {self.individuals} | Species: {self.species} | Total individuals: {self.population_size} | Total species: {self.n_species} | Total fitness: {self.total_fitness} | Average fitness: {self.average_fitness}"
+    
+    def generate_initial_population(self) -> None:
+        population = []
+        while len(population) < self.population_size:
+            population.append(Individual(np.random.choice(self.graphs)))
+        species_0 = Species(population)
+        species = Speciation([species_0])
+        super().__init__(species)
+
+
+class RandomPopulationInitiliser(Population):
+    def __init__(self, population_size: int, nodes: list[Node], initialisation_type: str = 'repeat', connection_density: float = 0.5):
+        self.population_size = population_size
+        self.nodes = nodes
+        self.initialisation_type = initialisation_type
+        self.connection_density = connection_density
+        if len(self.nodes) < 2:
+            raise ValueError("There must be at least two nodes to generate a random population")
+        if self.initialisation_type not in ['repeat', 'unique']:
+            raise ValueError("Initialisation type must be either 'repeat' or 'unique'")
+        self.generate_initial_population()
         
-        species_sorted = [Species(species.individuals, self.base_id + f".s{i}") for i, species in enumerate(species_sorted)]
-        self.__init__(species_sorted, self.node_start, self.node_end, self.id, self.generation + 1)
-
-
-class NewPopulation:
-    def __init__(self, node_start: Node, node_end: Node, n_individuals: int, initialisation_type: str = 'minimal', nodes: list = [], n_connections: int = 0) -> None:
-
-        self.node_start = node_start
-        self.node_end = node_end
-        self.individuals = []
-        self.n_individuals = n_individuals
-        self.base_id = f"s{self.node_start.id}.e{self.node_end.id}.g{0}.p{0}"
-        new_pop_id = self.base_id + f".s{0}"
-
-        if initialisation_type == 'minimal':
-            individual = Individual(new_pop_id + f".i{0}")
-            individual.generate_minimal_individual(self.node_start, self.node_end)
-
-            for i in range(n_individuals):
-                self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
-
-        elif initialisation_type == 'random_individual':
-            if n_connections == 0:
-                raise ValueError("Number of connections must be specified for random initialisation.")
-            
-            elif len(nodes) == 0:
-                raise ValueError("List of nodes must be specified for random initialisation.")
-            
-            else:
-                individual = Individual(new_pop_id + f".i{0}")
-                individual.generate_random_individual(self.node_start, self.node_end, nodes, n_connections)
-
-                for i in range(n_individuals):
-                    self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
-
-        elif initialisation_type == 'random_population':
-            if n_connections == 0:
-                raise ValueError("Number of connections must be specified for random initialisation.")
-            
-            elif len(nodes) == 0:
-                raise ValueError("List of nodes must be specified for random initialisation.")
-            
-            else:
-                for i in range(n_individuals):
-                    individual = Individual(new_pop_id + f".i{i + 1}")
-                    individual.generate_random_individual(self.node_start, self.node_end, nodes, n_connections)
-                    self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
-
+    def __repr__(self) -> str:
+        return f"Population ID: {self.id} | Individuals: {self.individuals} | Species: {self.species} | Total individuals: {self.population_size} | Total species: {self.n_species} | Total fitness: {self.total_fitness} | Average fitness: {self.average_fitness}"
+    
+    def generate_initial_population(self) -> None:
+        
+        if self.initialisation_type == 'repeat':
+            graph = RandomGraph(self.nodes, self.connection_density)
+            population = [Individual(graph) for _ in range(self.population_size)]
         else:
-            raise ValueError("Initialisation type must be either 'minimal', 'random_individual' or 'random_population'.")
+            population = [Individual(RandomGraph(self.nodes, self.connection_density)) for _ in range(self.population_size)]
+        species_0 = Species(population)
+        species = Speciation([species_0])
+        super().__init__(species)
+
+# class RandomGraph(Graph):
+#     def __init__(self, nodes: list[Node], connection_density: float = 0.5) -> None:
+#         if len(nodes) > 1:
+#             self.nodes = nodes
+#             self.connections = []
+#             possible_connections = list(combinations(self.nodes, 2))
+#             max_possible_connections = len(possible_connections)
+#             np.random.shuffle(possible_connections)
+#             while len(self.connections) < np.ceil(connection_density*max_possible_connections):
+#                 node_in, node_out = possible_connections.pop(0)
+#                 connection = Connection(node_in, node_out, enabled = True)
+#                 self.connections.append(connection)
+#             return super().__init__(self.connections)
+#         else:
+#             raise ValueError(f"Cannot create random graph with {len(nodes)} nodes - must have at least 2 nodes")
+
+
+
+# class NewPopulation(Population):
+#     def __init__(self, population_size: int, initialisation_type: str = 'minimal', nodes: list = [], n_connections: int = 0) -> None:
+#         self.individuals = []
+#         self.population_size = population_size
+#         self.base_id = f"s{self.node_start.id}.e{self.node_end.id}.g{0}.p{0}"
+#         new_pop_id = self.base_id + f".s{0}"
+
+#         if initialisation_type == 'minimal':
+#             individual = Individual(new_pop_id + f".i{0}")
+#             individual.generate_minimal_individual(self.node_start, self.node_end)
+
+#             for i in range(n_individuals):
+#                 self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
+
+#         elif initialisation_type == 'random_individual':
+#             if n_connections == 0:
+#                 raise ValueError("Number of connections must be specified for random initialisation.")
+            
+#             elif len(nodes) == 0:
+#                 raise ValueError("List of nodes must be specified for random initialisation.")
+            
+#             else:
+#                 individual = Individual(new_pop_id + f".i{0}")
+#                 individual.generate_random_individual(self.node_start, self.node_end, nodes, n_connections)
+
+#                 for i in range(n_individuals):
+#                     self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
+
+#         elif initialisation_type == 'random_population':
+#             if n_connections == 0:
+#                 raise ValueError("Number of connections must be specified for random initialisation.")
+            
+#             elif len(nodes) == 0:
+#                 raise ValueError("List of nodes must be specified for random initialisation.")
+            
+#             else:
+#                 for i in range(n_individuals):
+#                     individual = Individual(new_pop_id + f".i{i + 1}")
+#                     individual.generate_random_individual(self.node_start, self.node_end, nodes, n_connections)
+#                     self.individuals.append(Individual(new_pop_id + f".i{i + 1}", individual.graph))
+
+#         else:
+#             raise ValueError("Initialisation type must be either 'minimal', 'random_individual' or 'random_population'.")
         
-        self.population_size = n_individuals
-        self.species = [Species(self.individuals, new_pop_id)]
-        return Population(self.species, self.node_start, self.node_end, '0', 0)
+#         self.population_size = n_individuals
+#         self.species = [Species(self.individuals, new_pop_id)]
+#         return Population(self.species, self.node_start, self.node_end, '0', 0)
         
 
 
