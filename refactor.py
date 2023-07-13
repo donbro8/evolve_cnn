@@ -58,9 +58,9 @@ class SearchSpace(Node):
 
             layer_location = layer.pop("location")
             if layer_location == "local":
-                self.local_layers.append(layer)
+                self.local_layers.append(layer_type)
             elif layer_location == "global":
-                self.global_layers.append(layer)
+                self.global_layers.append(layer_type)
             else:
                 raise ValueError(f"Invalid layer location. Must be one of ['local', 'global']")
             
@@ -312,11 +312,15 @@ class Graph:
         else:
             possible_nodes = self.nodes
         return np.random.choice(possible_nodes)
+
+
     
 
 
 class RandomGraph(Graph):
-    def __init__(self, possible_nodes: list[Node], connection_density: float = 0.5) -> None:
+    def __init__(self, possible_nodes: list[Node], start_node: Node, end_node: Node, connection_density: float = 0.5) -> None:
+        possible_nodes.remove(start_node)
+        possible_nodes.remove(end_node)
         if len(possible_nodes) > 1:
             self.possible_nodes = possible_nodes
             self.connections = []
@@ -390,7 +394,7 @@ class Individual(Graph):
         self.id = '_'.join(['individual', str(len(Individual.individual_instances)), self.uuid[:4]])
 
     def __repr__(self) -> str:
-        return str(self.individual)
+        return self.id
     
     def copy(self) -> None:
         return Individual(self.connections)
@@ -407,7 +411,7 @@ class Species:
         self.get_new_representative()
         self.uuid = uuid.uuid4().hex
         Species.species_instances.append(self)
-        self.id = '_'.join(['species', len(Species.species_instances) - 1, self.uuid[:4]])
+        self.id = '_'.join(['species', str(len(Species.species_instances) - 1), self.uuid[:4]])
 
 
     def __repr__(self) -> str:
@@ -468,15 +472,16 @@ class Species:
             representative_connections = set([self.representative.connections[i] for i in range(len(self.representative.connections)) if self.representative.enabled_connections[i]])
 
         else:
+            
             individual_connections = set(individual.connections)
             representative_connections = set(self.representative.connections)
 
         return len(individual_connections.symmetric_difference(representative_connections))/(len(individual_connections) + len(representative_connections))
 
 
-class Speciation(Species):
-    def __init__(self, species: list[Species], delta_t: float = 0.5) -> list[Species]:
-        self.species = sorted(species, key=lambda species: species.fitness_shared, reverse=True)
+class Speciation:
+    def __init__(self, input_species: list[Species], delta_t: float = 0.5) -> list[Species]:
+        self.species = sorted(input_species, key=lambda x: x.fitness_shared, reverse=True)
         self.delta_t = delta_t
         self.individuals = [individual for species in self.species for individual in species.members]
         self.representatives = [species.representative for species in self.species]
@@ -484,17 +489,18 @@ class Speciation(Species):
         while len(unassigned_individuals) > 0:
             individual = unassigned_individuals[0]
             for species in self.species:
-                if species.compatability_distance(individual) < delta_t and individual not in species.members:
-                    species.add_member(individual)
+                if species.compatability_distance(individual) < delta_t:
+                    if individual not in species.members:
+                        species.add_member(individual)
                     unassigned_individuals.remove(individual)
                 elif species.compatability_distance(individual) >= delta_t and individual in species.members:
                     species.remove_member(individual)
+                species.update_species_info()
             if individual in unassigned_individuals:
-                new_species = super().__init__([individual])
+                new_species = Species([individual])
                 self.species.append(new_species)
-                self.species = sorted(species, key=lambda species: species.fitness_shared, reverse=True)
+                self.species = sorted(self.species, key=lambda x: x.fitness_shared, reverse=True)
                 unassigned_individuals.remove(individual)
-        return self.species
 
 
 class Population:
@@ -506,7 +512,7 @@ class Population:
         self.update_population_info()
         self.uuid = uuid.uuid4().hex
         Population.population_instances.append(self)
-        self.id = '_'.join(['population', len(Population.population_instances) - 1, self.uuid[:4]])
+        self.id = '_'.join(['population', str(len(Population.population_instances) - 1), self.uuid[:4]])
 
     def __repr__(self) -> str:
         return f"Population ID: {self.id} | Individuals: {self.individuals} | Species: {self.species} | Total individuals: {self.population_size} | Total species: {self.n_species} | Total fitness: {self.total_fitness} | Average fitness: {self.average_fitness}"
@@ -521,10 +527,11 @@ class Population:
         self.average_fitness = self.total_fitness/self.population_size
     
 
-class CustomPopulationInitiliser(Population):
+class CustomPopulationInitialiser(Population):
     def __init__(self, population_size: int, individuals: list[Individual]):
         self.population_size = population_size
         self.individuals = individuals
+        self.generate_initial_population()
 
     def __repr__(self) -> str:
         return f"Population size: {self.population_size} | Individuals: {self.individuals}"
@@ -546,10 +553,10 @@ class CustomPopulationInitiliser(Population):
         
         species_0 = Species(population)
         species = Speciation([species_0])
-        super().__init__(species)
+        super().__init__(species.species)
 
 
-class RandomPopulationInitiliser(Population):
+class RandomPopulationInitialiser(Population):
     def __init__(self, population_size: int, possible_nodes: list[Node], initialisation_type: str = 'repeat', connection_density: float = 0.5):
         self.population_size = population_size
         self.possible_nodes = possible_nodes # a sample of nodes from which to generate the individuals in the population, can sample nodes from layers.sample_nodes()
@@ -573,15 +580,15 @@ class RandomPopulationInitiliser(Population):
             population = [Individual(RandomGraph(self.possible_nodes, self.connection_density).connections) for _ in range(self.population_size)]
         species_0 = Species(population)
         species = Speciation([species_0])
-        super().__init__(species)
+        super().__init__(species.species)
         
 
 
 class Mutation:
-    def __init__(self, population: Population, layers: SearchSpace, p_mutation: float) -> None:
+    def __init__(self, population: Population, layers: SearchSpace, mutation_probability: float) -> None:
         self.population = population
         self.layers = layers
-        self.p_mutation = p_mutation
+        self.mutation_probability = mutation_probability
 
     def __repr__(self) -> str:
         return f"Mutation probability: {self.p_mutation}"
@@ -591,29 +598,50 @@ class Mutation:
         new_node_layer_type = self.layers.get_random_layer_type(self.layers.local_layers)
         new_node_attributes = self.layers.get_random_layer_attributes(new_node_layer_type)
 
-        node_in = individual.get_random_node(add_node_point=True, node_point='start')
-
-        if node_in == 'start':
-            node_out = individual.get_random_node()
-            node_in = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
-            individual.add_connection(Connection(node_in, node_out, True))
+        while True:
+            node_1 = individual.get_random_node()
+            node_2 = individual.get_random_node()
+            if node_1 != node_2:
+                break
+        
+        if individual.order_nodes.index(node_1) < individual.order_nodes.index(node_2):
+            node_in = node_1
+            node_out = node_2
 
         else:
-            node_out = individual.get_random_node(add_node_point=True, node_point='end')
-            if node_out == 'end':
-                node_out = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
-                individual.add_connection(Connection(node_in, node_out, True))
-            else:
-                split_connection = [connection for connection in individual.connections if connection.node_in == node_in and connection.node_out == node_out][0]
-                individual.delete_connection(split_connection)
-                new_node = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
-                individual.add_connection(Connection(node_in, new_node, True))
-                individual.add_connection(Connection(new_node, node_out, True))
+            node_in = node_2
+            node_out = node_1
+
+        split_connection = [connection for connection in individual.connections if connection.node_in == node_in and connection.node_out == node_out][0]
+        individual.delete_connection(split_connection)
+        new_node = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
+        individual.add_connection(Connection(node_in, new_node))
+        individual.add_connection(Connection(new_node, node_out))
+
+        # The following code allows for the addition of nodes at the start or end of the graph, but this is not currently implemented
+        # node_in = individual.get_random_node(add_node_point=True, node_point='start')
+
+        # if node_in == 'start':
+        #     node_out = individual.get_random_node()
+        #     node_in = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
+        #     individual.add_connection(Connection(node_in, node_out, True))
+
+        # else:
+        #     node_out = individual.get_random_node(add_node_point=True, node_point='end')
+        #     if node_out == 'end':
+        #         node_out = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
+        #         individual.add_connection(Connection(node_in, node_out, True))
+        #     else:
+        #         split_connection = [connection for connection in individual.connections if connection.node_in == node_in and connection.node_out == node_out][0]
+        #         individual.delete_connection(split_connection)
+        #         new_node = self.layers.assign_node_layer(new_node_layer_type, new_node_attributes)
+        #         individual.add_connection(Connection(node_in, new_node, True))
+        #         individual.add_connection(Connection(new_node, node_out, True))
         
 
     def mutate_add_connection(self, individual: Individual) -> None:
         possible_nodes = individual.nodes
-        max_possible_connections = len(list(combinations(len(possible_nodes), 2)))
+        max_possible_connections = len(list(combinations(possible_nodes, 2)))
         current_connections = [(connection.node_in, connection.node_out) for connection in individual.connections]
         population_connections = [(connection.node_in, connection.node_out) for connection in Connection.connection_instances]
         if len(set(individual.connections)) < max_possible_connections:
@@ -662,7 +690,7 @@ class Mutation:
             print("Warning: Switched all connections and did not find a continuous graph. Skipping mutation.")
 
     
-    def mutate(self, individual: Individual, p_array: list[float]) -> None:
+    def mutate(self, individual: Individual, p_array: list[float] = [0.5, 0.5, 0.0]) -> None:
         mutation_type = np.random.choice(['add_node', 'add_connection', 'switch_connection'], p = p_array)
         if 'add_node' == mutation_type:
             self.mutate_add_node(individual)
@@ -673,16 +701,15 @@ class Mutation:
         else:
             self.mutate_switch_connection(individual)
 
-    def selection(self) -> None:
-        selected_individuals = [individual for individual in self.population.individuals if np.random.uniform() < self.p_mutation]
+    def mutate_population(self, p_array: list[float] = [0.5, 0.5, 0.0]) -> None:
+        selected_individuals = [individual for individual in self.population.individuals if np.random.uniform() < self.mutation_probability]
         for individual in selected_individuals:
-            self.mutate(individual)
+            self.mutate(individual, p_array)
 
 
 class Crossover:
-    def __init__(self, population: Population, p_crossover: float) -> None:
+    def __init__(self, population: Population) -> None:
         self.population = population
-        self.p_crossover = p_crossover
 
     def __repr__(self) -> str:
         return f"Crossover probability: {self.p_crossover}"
@@ -735,8 +762,10 @@ class Crossover:
         return new_individual
     
 
-    def generate_offspring(self, mutation: Mutation) -> list:
-        remainder = self.assign_offspring_count()
+    def generate_offspring(self, layers: SearchSpace) -> list:
+        # remainder = self.assign_offspring_count()
+        self.layers = layers
+        mutation = Mutation(self.population, self.layers, mutation_probability=1.0)
         offspring_remaining = self.population.population_size
         new_population = []
         current_species = self.population.species.copy()
@@ -809,10 +838,8 @@ class BuildLayer(Layer):
                 self.graph.layers[index] = Flatten()
             elif node.node_type == 'Identity':
                 self.graph.layers[index] = Lambda(lambda x: x)
-            # elif node.node_type == 'Input':
-            #     self.graph.layers[index] = Input(**node.attributes)
             else:
-                raise ValueError("Node type must be one of 'Conv2D', 'BatchNormalization', 'Dense', 'MaxPooling2D', 'AveragePooling2D', 'SpatialDropout2D', 'GlobalAveragePooling2D', 'Flatten', 'Identity', 'Input'")
+                raise ValueError(f"Invalid node type {node.node_type} - Node type must be one of 'Conv2D', 'BatchNormalization', 'Dense', 'MaxPooling2D', 'AveragePooling2D', 'SpatialDropout2D', 'GlobalAveragePooling2D', 'Flatten', 'Identity'")
             
     def get_layers(self):
         layers = []
@@ -867,11 +894,105 @@ class BuildModel(Model):
         return x
 
 
+class TrainModel:
+    def __init__(self,
+                 graphs: list[Graph], 
+                 train_data: tuple[np.ndarray], 
+                 test_data: tuple[np.ndarray], 
+                 validation_data: tuple[np.ndarray] = None,
+                 batch_size: int = 32, 
+                 epochs: int = 2, 
+                 verbose: int = 1,
+                 optimizer: str = 'adam',
+                 loss: str = 'categorical_crossentropy',
+                 metrics: list[str] = ['accuracy']
+                 ) -> None:
+        self.model = BuildModel(graphs)
+        self.train_data = train_data
+        self.test_data = test_data
+        self.validation_data = validation_data
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.verbose = verbose
+        self.model.build(input_shape = (None,) + self.train_data[0].shape[1:])
+        self.model_params = self.model.count_params()
+        self.model.compile(
+            optimizer = optimizer,
+            loss = loss,
+            metrics = metrics
+        )
+        self.history = self.model.fit(
+            x = self.train_data[0],
+            y = self.train_data[1],
+            batch_size = self.batch_size,
+            epochs = self.epochs,
+            verbose = self.verbose,
+            validation_data = validation_data
+        )
+
+    def evaluate_model(self):
+        return self.history.history['val_accuracy'][-1]
+
+    # def evaluate_population(self, population: Population, input_graph: Graph, output_graph: Graph, n_repeats: int = 1) -> Population:
+    #     for individual in population.individuals:
+    #         blocks = [individual]*n_repeats
+    #         graphs = [input_graph] + blocks + [output_graph]
+    #         model = TrainModel(graphs, self.train_data, self.test_data, self.validation_data)
+    #         individual.fitness = model.evaluate_model()
+    #     population.update_population_info()
+    #     return population
+
+        
+        
 
 class EvolveBlock:
-    def __init__(self, n_pop) -> None:
-        pass # self, species: list, node_start: Node, node_end: Node, id: str, generation: str
+    def __init__(self, population_size: int, generations: int, mutation_probability: float, crossover_probability: float, layers: SearchSpace) -> None:
+        self.population_size = population_size
+        self.generations = generations
+        self.mutation_probability = mutation_probability
+        self.crossover_probability = crossover_probability
+        self.layers = layers
+
+    def generate_initial_population(self, initial_individuals: list[Individual]) -> Population:
+        population = CustomPopulationInitialiser(self.population_size, initial_individuals)
+        return population
+    
+
+    def run_genetic_operators(self, population: Population, mutation_type_probability: list[float] = [0.5, 0.5, 0.0]) -> None:
+
+        new_species = Speciation(population.species).species
+        new_population = Population(new_species)
+
+        if np.random.uniform() < self.crossover_probability:
+            crossover = Crossover(new_population)
+            crossover.assign_offspring_count()
+            new_population.species = crossover.generate_offspring(self.layers)
+            new_population.update_population_info()
 
 
-    def run_evolution(self):
-        self.population = NewPopulation(self)
+        if self.mutation_probability > 0:
+            mutation = Mutation(new_population, self.layers, self.mutation_probability)
+            mutation.mutate_population(mutation_type_probability)
+            new_population.update_population_info()
+
+        return new_population
+    
+    def run_evaluation(self, population: Population, input_graph: Graph, output_graph: Graph, train_data: tuple[np.ndarray], test_data: tuple[np.ndarray], validation_data: tuple[np.ndarray]) -> Population:
+        for individual in population.individuals:
+            graphs = [input_graph, individual, output_graph]
+            model = TrainModel(graphs, train_data, test_data, validation_data)
+            individual.fitness = model.evaluate_model()
+        population.update_population_info()
+        return population
+
+    
+    def run_evolution(self, initial_individuals: list[Individual], input_graph: Graph, output_graph: Graph, train_data: tuple[np.ndarray], test_data: tuple[np.ndarray], validation_data: tuple[np.ndarray]) -> Population:
+        self.population = self.generate_initial_population(initial_individuals)
+        
+        for generation in range(self.generations):
+
+            print(f"Generation {generation + 1} of {self.generations}")
+            self.population = self.run_genetic_operators(self.population)
+            self.population = self.run_evaluation(self.population, input_graph, output_graph, train_data, test_data, validation_data)
+
+        return self.population
