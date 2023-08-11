@@ -1,6 +1,9 @@
 import numpy as np
 from copy import deepcopy
 import networkx as nx
+import uuid
+import itertools
+from math import fsum
 
 
 class Individual:
@@ -120,9 +123,6 @@ class Individual:
                     self.add_edge(G)
 
 
-import uuid
-import itertools
-from math import fsum
 
 class SearchSpace:
 
@@ -232,6 +232,10 @@ class Species:
     def update_shared_fitness(self) -> None:
         self.shared_fitness = np.sum([member.fitness for member in self.members])/len(self.members)
 
+    
+    def species_age(self, generation: int) -> int:
+        return generation - self.start_generation
+    
     
     def sorensen_dice(self, A: set, B: set) -> float:
         return 2*len(A.intersection(B))/(len(A) + len(B))
@@ -378,7 +382,7 @@ class Species:
             
         return offspring
     
-
+    
 class Population:
 
     def __init__(
@@ -404,3 +408,84 @@ class Population:
         for individual in self.population:
             samples = self.search_space.sample_from_search_space(n_samples = n_node_samples, sample_probabilities = sample_probabilties)
             individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = minimum_connection_density)
+        self.species = [Species(self.population)]
+
+
+    def reset_species(self) -> None:
+        for species in self.species:
+            for individual in species.members:
+                if individual != species.representative:
+                    species.remove_member(individual)
+    
+    def speciation(self, generation: int, c1: float = 0.5, c2: float = 1.0, similarity_threshold: float = 0.5, maximum_species_proportion: float = 0.2) -> None:
+        self.reset_species()
+        for individual in self.population:
+            species_found = False
+            for species in self.species:
+                if species.similarity(individual, c1, c2) >= similarity_threshold:
+                    species_found = True
+                    if individual != species.representative:
+                        species.add_member(individual)
+                        break
+            if not species_found:
+                self.species.append(Species([individual], start_generation=generation))
+                if len(self.species) > maximum_species_proportion*self.population_size:
+                    self.species.remove(sorted(self.species, key = lambda x: x.shared_fitness)[0])
+        for species in self.species:
+            species.update_representative()
+            species.update_shared_fitness()
+
+    def remove_oldest_individual(self) -> None:
+        self.population.remove(sorted(self.population, key = lambda x: x.age)[-1])
+    
+    def remove_worst_individuals(self, percentage_population: float = 0.5) -> None:
+        number_of_individuals_to_remove = int(percentage_population*self.population_size)
+        number_of_individuals_to_keep = self.population_size - number_of_individuals_to_remove
+        self.population = sorted(self.population, key = lambda x: x.fitness, reverse = True)[:number_of_individuals_to_keep]
+        for species in self.species:
+            species.members = [member for member in species.members if member in self.population]
+    
+    def get_species_age(self, generation: int) -> list[int]:
+        return [species.species_age(generation) for species in self.species]
+    
+    def maximum_unique_pairs(self, n: int = 2) -> int:
+        return int(n*(n-1)/2)
+    
+    def generate_offspring(self, percentage_offspring: float = 0.5) -> None:
+        
+        shared_fitness = np.array([species.shared_fitness for species in self.species])/np.sum([species.shared_fitness for species in self.species])
+
+        next_gen_species_count = np.round(self.population_size * shared_fitness, 0).astype(int)
+        n_offspring = np.floor(next_gen_species_count*percentage_offspring).astype(int)
+
+        leftover_offspring = self.population_size*percentage_offspring - np.sum(n_offspring)
+
+        n_offspring = n_offspring + np.random.multinomial(leftover_offspring, shared_fitness)
+        
+        for i in range(len(self.species)):
+
+            max_pairs = self.maximum_unique_pairs(len(self.species[i].members))
+
+            if max_pairs < n_offspring[i]:
+                
+                # Get every combination of parent pairs
+                parent_list = list(itertools.combinations(self.species[i].members, 2))
+
+                for parents in parent_list:
+                    self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+
+                while len(self.species[i].members) < next_gen_species_count[i]:
+                    self.species[i].add_member(Individual())
+
+            # If there are enough/more than enough possible combinations, then we remove the worst performing
+            # individuals and use every parent combination to generate offspring
+            else:
+                min_pairs = self.maximum_unique_pairs(n_offspring[i])
+                n_members_to_keep = np.random.randint(min_pairs, max_pairs)
+                self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)[:n_members_to_keep]
+
+                parent_list = list(itertools.combinations(self.species[i].members, 2))
+
+                while len(self.species[i].members) < next_gen_species_count[i]:
+                    parents = parent_list.pop(np.random.randint(len(parent_list)))
+                    self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
