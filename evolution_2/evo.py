@@ -15,12 +15,64 @@ class Individual:
         self.graph = nx.DiGraph()
         self.graph.add_edges_from(edges, weight = 1.0)
         self.fitness = 0.5
+        self.is_trained = False
         self.age = 0
         self.__class__.individual_instances.add(self)
         self.id = len(self.__class__.individual_instances)
+        self.initialise_evolution_tracker()
 
     def __repr__(self) -> str:
         return f"Individual {self.id} | Fitness: {self.fitness}"
+    
+    def initialise_evolution_tracker(
+        self,
+        species_id: str = None,
+        species_start_generation: int = None,
+        species_representative_id: int = None,
+        species_similarity_score: float = None,
+        species_shared_fitness: float = None,
+        species_number_of_members: int = None,
+        is_offspring: bool = False,
+        offspring_of: tuple[int, int] = None,
+        number_of_paths_inherited: int = None,
+        crossover_shared_with: list[int] = [],
+        offspring_generated: list[int] = [],
+        is_mutated: bool = False,
+        node_mutation: tuple[str, str, str] = None,
+        connection_mutation: tuple[str, str] = None,
+        switch_mutation: tuple[str, str, int] = None,
+        training_history: dict = None,
+        training_time: float = None,
+        training_accuracy: float = None,
+        training_loss: float = None,
+        validation_accuracy: float = None,
+        validation_loss: float = None,
+        number_of_params: int = None
+    ) -> None:
+        self.species_id = species_id
+        self.species_start_generation = species_start_generation
+        self.species_representative_id = species_representative_id
+        self.species_similarity_score = species_similarity_score
+        self.species_shared_fitness = species_shared_fitness
+        self.species_number_of_members = species_number_of_members
+        self.is_offspring = is_offspring
+        self.offspring_of = offspring_of
+        self.number_of_paths_inherited = number_of_paths_inherited
+        self.crossover_shared_with = crossover_shared_with
+        self.offspring_generated = offspring_generated
+        self.is_mutated = is_mutated
+        self.node_mutation = node_mutation
+        self.connection_mutation = connection_mutation
+        self.switch_mutation = switch_mutation
+        self.training_history = training_history
+        self.training_time = training_time
+        self.training_accuracy = training_accuracy
+        self.training_loss = training_loss
+        self.validation_accuracy = validation_accuracy
+        self.validation_loss = validation_loss
+        self.number_of_params = number_of_params
+        
+    
     
     def enabled_edges(self, G: nx.DiGraph) -> list[tuple[str,str, float]]:
         return [(a, b, 1.0) for a,b in G.edges() if G.get_edge_data(a,b)['weight'] == 1]
@@ -59,6 +111,7 @@ class Individual:
     
     def add_edge(self, G: nx.DiGraph) -> None:
         if len(G.edges()) < self.maximum_possible_edges(G):
+            self.is_built = False
             nodes = list(nx.topological_sort(G))
             while True:
                 if np.random.rand() < 0.5:
@@ -69,6 +122,9 @@ class Individual:
                     node_in = np.random.choice(nodes[:nodes.index(node_out)])
                 if not G.has_edge(node_in, node_out):
                     G.add_edge(node_in, node_out, weight = 1.0)
+                    self.connection_mutation = (node_in, node_out)
+                    self.is_mutated = True
+                    self.is_trained = False
                     break
         else:
             print("Warning: Maximum number of edges reached.")
@@ -82,6 +138,9 @@ class Individual:
             G.remove_edge(node_in, node_out)
             G.add_edge(node_in, node[0], weight = 1.0)
             G.add_edge(node[0], node_out, weight = 1.0)
+            self.node_mutation = (node_in, node_out, node[0])
+            self.is_mutated = True
+            self.is_trained = False
         else:
             print(f"Warning: Node {node[0]} already exists.")
     
@@ -96,11 +155,17 @@ class Individual:
                 for path in nx.all_simple_paths(reduced_graph, source, target):
                     if source in path and target in path:
                         switched = True
+                        self.switch_mutation = (edge[0], edge[1], 0)
+                        self.is_mutated = True
+                        self.is_trained = False
                         break
                     else:
                         G[edge[0]][edge[1]]['weight'] = 1.0
             else:
                 G[edge[0]][edge[1]]['weight'] = 1.0
+                self.switch_mutation = (edge[0], edge[1], 1)
+                self.is_mutated = True
+                self.is_trained = False
                 break
     
     def ordered_nodes(self, G: nx.DiGraph) -> list[str]:
@@ -123,6 +188,10 @@ class Individual:
                     self.add_edge(G)
 
 
+    def fitness_function(self, x, y, y_max, y_limit: int = 10000, beta:float = 0.5):
+        return np.max([0, x - beta * (y/np.min([y_max, y_limit]))])
+
+
 
 class SearchSpace:
 
@@ -137,18 +206,18 @@ class SearchSpace:
                     'padding':['same']
                     },
                 'AveragePooling2D':{
-                    'pool_size':[(2,2)],
+                    'pool_size':[(3,3)],
                     'strides':[(1,1)],
                     'padding':['same']
-                    },
-                'MaxPooling2D':{
-                    'pool_size':[(2,2)],
-                    'strides':[(1,1)],
-                    'padding':['same']
-                    },
-                'SpatialDropout2D':{
-                    'rate':[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
-                    }
+                    }#,
+                # 'MaxPooling2D':{
+                #     'pool_size':[(3,3)],
+                #     'strides':[(1,1)],
+                #     'padding':['same']
+                #     },
+                # 'SpatialDropout2D':{
+                #     'rate':[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+                #     }
             }
         ) -> None:
         search_space = []
@@ -216,7 +285,7 @@ class Species:
         if individual not in self.members:
             self.members.append(individual)
         else:
-            print(f"Warning: Individual {individual} already in species {self}.")
+            print(f"Warning: Individual {self.self.individual} already in species {self}.")
 
 
     def remove_member(self, individual: Individual) -> None:
@@ -232,6 +301,13 @@ class Species:
     def update_shared_fitness(self) -> None:
         self.shared_fitness = np.sum([member.fitness for member in self.members])/len(self.members)
 
+    def update_individual_species_info(self, individual: Individual) -> None:
+        individual.species_id = self.id
+        individual.species_start_generation = self.start_generation
+        individual.species_representative_id = self.representative.id
+        individual.species_similarity_score = self.similarity(individual)
+        individual.species_shared_fitness = self.shared_fitness
+        individual.species_number_of_members = len(self.members)
     
     def species_age(self, generation: int) -> int:
         return generation - self.start_generation
@@ -256,6 +332,9 @@ class Species:
     
     def crossover(self, individual_1: Individual, individual_2: Individual) -> Individual:
 
+        individual_1.crossover_shared_with.append(individual_2.id)
+        individual_2.crossover_shared_with.append(individual_1.id)
+
         individual_1_path_genes = individual_1.get_path_genes()
         individual_1_path_genes_set = set([tuple(path) for path in individual_1_path_genes])
         individual_1_paths = list(nx.all_simple_paths(individual_1.graph, 'input', 'output'))
@@ -269,7 +348,7 @@ class Species:
 
         shared_path_genes = list(individual_1_path_genes_set.intersection(individual_2_path_genes_set))
 
-        min_paths = np.random.randint(max([1, len(shared_path_genes)]), max([1, np.random.choice([len(individual_1_paths), len(individual_2_paths)], p = fitness_probabilities)])  + 1)
+        min_paths = np.random.randint(max([1, len(shared_path_genes)]), max([2, np.random.choice([len(individual_1_paths), len(individual_2_paths)], p = fitness_probabilities)])  + 1)
         
         offspring_edges = []
         gene_edges = []
@@ -379,7 +458,13 @@ class Species:
             
             else:
                 raise ValueError("Invalid offspring edge.")
-            
+
+        offspring.offspring_of = (individual_1.id, individual_2.id)
+        offspring.is_offspring = True
+        offspring.number_of_paths_inherited = n_paths
+        individual_1.offspring_generated.append(offspring.id)
+        individual_2.offspring_generated.append(offspring.id)    
+        
         return offspring
     
     
@@ -418,22 +503,26 @@ class Population:
                     species.remove_member(individual)
     
     def speciation(self, generation: int, c1: float = 0.5, c2: float = 1.0, similarity_threshold: float = 0.5, maximum_species_proportion: float = 0.2) -> None:
+        species.update_representative()
         self.reset_species()
         for individual in self.population:
             species_found = False
             for species in self.species:
-                if species.similarity(individual, c1, c2) >= similarity_threshold:
+                similarity_score = species.similarity(individual, c1, c2)
+                if similarity_score >= similarity_threshold:
                     species_found = True
                     if individual != species.representative:
                         species.add_member(individual)
-                        break
+                    break
             if not species_found:
                 self.species.append(Species([individual], start_generation=generation))
                 if len(self.species) > maximum_species_proportion*self.population_size:
                     self.species.remove(sorted(self.species, key = lambda x: x.shared_fitness)[0])
         for species in self.species:
-            species.update_representative()
             species.update_shared_fitness()
+            for individual in species.members:
+                species.update_individual_species_info(individual)
+    
 
     def remove_oldest_individual(self) -> None:
         self.population.remove(sorted(self.population, key = lambda x: x.age)[-1])
@@ -480,12 +569,428 @@ class Population:
             # If there are enough/more than enough possible combinations, then we remove the worst performing
             # individuals and use every parent combination to generate offspring
             else:
-                min_pairs = self.maximum_unique_pairs(n_offspring[i])
-                n_members_to_keep = np.random.randint(min_pairs, max_pairs)
-                self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)[:n_members_to_keep]
+                self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)
 
-                parent_list = list(itertools.combinations(self.species[i].members, 2))
+                parent_list = sorted(list(itertools.combinations(self.species[i].members, 2)), key = lambda x: x[0].fitness + x[1].fitness, reverse = True)
+                print(parent_list)
 
-                while len(self.species[i].members) < next_gen_species_count[i]:
-                    parents = parent_list.pop(np.random.randint(len(parent_list)))
+                i = 0
+                
+                while i < n_offspring[i]:
+                    self.species[i].remove_member(self.species[i].members[-1])
+                    parents = parent_list.pop(0)
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+
+
+class BuildLayer(Layer):
+
+    # Need to pass in reduced graph to ensure only valid graph built
+    def __init__(self, graph, **kwargs) -> None:
+        super(BuildLayer, self).__init__(**kwargs)
+        self.graph = graph
+        self.params = 0
+        self.layers = []
+        self.nodes = list(nx.topological_sort(self.graph))
+        for node in self.nodes:
+            node_type = node.split('_')[0]
+            node_attributes = self.graph.nodes[node]
+            if node_type == 'Conv2D':
+                self.layers.append(Conv2D(**node_attributes))
+            elif node_type == 'BatchNormalization':
+                self.layers.append(BatchNormalization())
+            elif node_type == 'Dense':
+                self.layers.append(Dense(**node_attributes))
+            elif node_type == 'MaxPooling2D':
+                self.layers.append(MaxPooling2D(**node_attributes))
+            elif node_type == 'AveragePooling2D':
+                self.layers.append(AveragePooling2D(**node_attributes))
+            elif node_type == 'SpatialDropout2D':
+                self.layers.append(SpatialDropout2D(**node_attributes))
+            elif node_type == 'GlobalAveragePooling2D':
+                self.layers.append(GlobalAveragePooling2D())
+            elif node_type == 'Flatten':
+                self.layers.append(Flatten())
+            elif node_type in ['Identity', 'input', 'output']:
+                self.layers.append(Lambda(lambda x: x))
+            else:
+                print(f"Warning: Node type {node_type} not recognised.")
+    
+
+    def count_params(self):
+        params = 0
+        for layer in self.layers:
+            params += layer.count_params()
+        self.params = params
+
+    def get_config(self):
+        config = super().get_config()
+        config.params = self.count_params()
+        return config
+    
+    def call(self, inputs):
+        x = inputs
+        self.defined_nodes = [None  for _ in range(len(self.nodes))]
+        for i in range(len(self.nodes)):
+
+            layer = self.layers[i]
+            node_inputs = list(self.graph.predecessors(self.nodes[i]))
+
+            if len(node_inputs) == 0:
+                self.defined_nodes[i] = layer(x)
+
+            elif len(node_inputs) == 1:
+                self.defined_nodes[i] = layer(self.defined_nodes[self.nodes.index(node_inputs[0])])
+
+            else:
+                concat = Concatenate()([self.defined_nodes[self.nodes.index(node_input)] for node_input in node_inputs])
+                self.defined_nodes[self.nodes.index(self.nodes[i])] = layer(concat)
+        return self.defined_nodes[-1]
+
+
+class ModelCompiler():
+
+    def __init__(
+        self,
+        input_graph: nx.DiGraph,
+        normal_cell_graph: nx.DiGraph,
+        output_graph: nx.DiGraph,
+        reduction_cell_graph: nx.DiGraph,
+        normal_cell_repeats: int = 3,
+        substructure_repeats: int = 3,
+        validation_data: tuple[np.ndarray] = None,
+        batch_size: int = 32, 
+        epochs: int = 2, 
+        verbose: int = 1,
+        optimizer: str = 'adam',
+        loss: str = 'categorical_crossentropy',
+        metrics: list[str] = ['accuracy']
+
+    ) -> None:
+        self.input_graph = input_graph
+        self.normal_cell_graph = normal_cell_graph
+        self.output_graph = output_graph
+        self.reduction_cell_graph = reduction_cell_graph
+        self.normal_cell_repeats = normal_cell_repeats
+        self.substructure_repeats = substructure_repeats
+
+
+    def build_model(self, input_shape: tuple[int]):
+        input_layer = Input(shape = input_shape, name = 'Input Layer')
+        x = BuildLayer(self.input_graph, name = 'IC')(input_layer)
+        for M in range(self.substructure_repeats):
+            for N in range(self.normal_cell_repeats):
+                x = BuildLayer(self.normal_cell_graph, name = 'NC_' + str(M + 1) + '_' + str(N + 1))(x)
+            x = BuildLayer(self.reduction_cell_graph, name = 'RC_' + str(M + 1))(x)
+        x = BuildLayer(self.output_graph, name = 'OC')(x)
+        return Model(inputs = input_layer, outputs = x)
+
+
+    def train_model(
+        train_data: tuple[np.ndarray], 
+        model: Model,
+        validation_data: tuple[np.ndarray] = None,
+        batch_size: int = 32, 
+        epochs: int = 2, 
+        verbose: int = 1,
+        optimizer: str = 'adam',
+        loss: str = 'categorical_crossentropy',
+        metrics: list[str] = ['accuracy','mse'],
+        measure_time: bool = True
+    ):
+        model.compile(
+            optimizer = optimizer,
+            loss = loss,
+            metrics = metrics
+        )
+        if measure_time:
+            start_time = time.time()
+        history = model.fit(
+            x = train_data[0],
+            y = train_data[1],
+            batch_size = batch_size,
+            epochs = epochs,
+            verbose = verbose,
+            validation_data = validation_data
+        )
+        if measure_time:
+            end_time = time.time()
+            history.history['training_time'] = end_time - start_time
+        return history
+    
+
+from dataclasses import dataclass
+
+@dataclass
+class EvolutionTracker:
+
+    date_time: str
+    run_number: int
+    generation: int
+    phase_name: str
+    phase_threshold: float
+    individual_mutation_rate: float
+    node_mutation_prob: float
+    connection_mutation_prob: float
+    switch_mutation_prob: float
+    individual: Individual
+
+    def __post_init__(self):
+        self.individual_id: int = self.individual.id
+        self.individual_edges: list[tuple[str,str,dict]] = [edge for edge in self.individual.graph.edges(data = True)]
+        self.individual_nodes: list[tuple[str,dict]] = [node for node in self.individual.graph.nodes(data = True)]
+        self.individual_age: int = self.individual.age
+        self.individual_fitness: float = self.individual.fitness
+        self.individual_is_trained: bool = self.individual.is_trained
+        self.species_id: str = self.individual.species_id
+        self.species_start_generation: int = self.individual.species_start_generation
+        self.species_representative_id: str = self.individual.species_representative_id
+        self.species_similarity_score: float = self.individual.species_similarity_score
+        self.species_shared_fitness: float = self.individual.species_shared_fitness
+        self.species_number_of_members: int = self.individual.species_number_of_members
+        self.is_offspring: bool = self.individual.is_offspring
+        self.offspring_of: tuple[int,int] = self.individual.offspring_of
+        self.number_of_paths_inherited: int = self.individual.number_of_paths_inherited
+        self.crossover_shared_with: list[int] = self.individual.crossover_shared_with
+        self.offspring_generated: list[int] = self.individual.offspring_generated
+        self.is_mutated: bool = self.individual.is_mutated
+        self.node_mutation: tuple[str,str,str] = self.individual.node_mutation
+        self.connection_mutation: tuple[str,str] = self.individual.connection_mutation
+        self.switch_mutation: tuple[str,str,int] = self.individual.switch_mutation
+        self.training_history: dict = self.individual.training_history
+        self.training_time: float = self.individual.training_time
+        self.training_accuracy: float = self.individual.training_accuracy
+        self.training_loss: float = self.individual.training_loss
+        self.validation_accuracy: float = self.individual.validation_accuracy
+        self.validation_loss: float = self.individual.validation_loss
+        self.number_of_params: int = self.individual.number_of_params
+    
+
+class Evolution():
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        input_graph: nx.DiGraph,
+        output_graph: nx.DiGraph,
+        reduction_cell_graph: nx.DiGraph,
+        train_data: tuple[np.ndarray], 
+        validation_data: tuple[np.ndarray],
+        population_size: int = 10,
+        initialisation_type: str = 'minimal',
+        generations: int = 2,
+        phases: dict = {
+            'rapid_expansion':{
+                'generation_percentage':0.1,
+                'individual_mutation_rate':1.0,
+                'mutation_type_rate':[0.8,0.2,0.0]
+            },
+            'steady_growth':{
+                'generation_percentage':0.7,
+                'individual_mutation_rate':0.3,
+                'mutation_type_rate':[0.4,0.4,0.2]
+            },
+            'local_exploration':{
+                'generation_percentage':0.2,
+                'individual_mutation_rate':0.8,
+                'mutation_type_rate':[0.0,0.5,0.5]
+            }
+        },
+        normal_cell_repeats: int = 3,
+        substructure_repeats: int = 3,
+        parameter_limit: int = 100000,
+        complexity_penalty: float = 0.5,
+        number_of_runs: int = 1
+
+    ) -> None:
+        self.search_space = search_space
+        self.input_graph = input_graph
+        self.output_graph = output_graph
+        self.reduction_cell_graph = reduction_cell_graph
+        self.population_size = population_size
+        self.initialisation_type = initialisation_type
+        self.generations = generations
+        self.phases = phases
+        self.phase_names = list(phases.keys())
+        self.phase_thresholds = np.array(list(accumulate([self.phases[phase]['generation_percentage']*self.generations for phase in self.phase_names])))
+        self.normal_cell_repeats = normal_cell_repeats
+        self.substructure_repeats = substructure_repeats
+        self.train_data = train_data
+        self.validation_data = validation_data
+        self.parameter_limit = parameter_limit
+        self.complexity_penalty = complexity_penalty
+        self.number_of_runs = number_of_runs
+
+    
+    def update_evolution_tracker(
+        self,
+        run_number: int,
+        generation: int,
+        phase_name: str,
+        phase_threshold: float,
+        individual_mutation_rate: float,
+        node_mutation_prob: float,
+        connection_mutation_prob: float,
+        switch_mutation_prob: float,
+        population: Population,
+        evolution_tracker: dict = {},
+        save_to_file: bool = False,
+        location: str = 'experiments'
+    ) -> dict:
+        
+        run_id = 'r' + str(run_number) + '_g' + str(generation)
+
+        evolution_tracker[run_id] = {
+            'r' + str(run_number) + '_g' + str(generation) + '_i' + str(i):EvolutionTracker(
+                date_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                run_number = run_number,
+                generation = generation,
+                phase_name = phase_name,
+                phase_threshold = phase_threshold,
+                individual_mutation_rate = individual_mutation_rate,
+                node_mutation_prob = node_mutation_prob,
+                connection_mutation_prob = connection_mutation_prob,
+                switch_mutation_prob = switch_mutation_prob,
+                individual = population.population[i]
+            )
+
+            for i in range(len(population.population))
+        }
+
+        if save_to_file:
+            self.pickle_evolution_tracker(evolution_tracker[run_id], filename = run_id, location = location)
+
+        return evolution_tracker
+    
+    
+    def pickle_evolution_tracker(self, evolution_tracker: dict, filename: str, location: str = 'experiments') -> None:
+
+        if '.pkl' not in filename:
+            filename += '.pkl'
+
+        cwd = os.getcwd()
+        path_dir = os.path.join(cwd, location)
+        path_file = os.path.join(path_dir, filename)
+
+        if not os.path.exists(path_dir):
+            os.makedirs(path_dir)
+
+        with open(path_file, 'wb') as f:
+            pickle.dump(evolution_tracker, f)
+    
+    
+    
+    def single_run(self, run_number: int):
+
+        # Initialise population
+        print(f"Initialising a {self.initialisation_type} population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
+        population = Population(population_size = self.population_size, initialisation_type = self.initialisation_type, search_space = self.search_space)
+        population.minimal_initialisation()
+
+        # Initialise phase
+        phase_number = 0
+        phase = self.phase_names[phase_number]
+        phase_threshold = self.phase_thresholds[phase_number]
+        individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
+        mutation_type_rate = self.phases[phase]['mutation_type_rate']
+        maximum_params = 0
+
+        evolution_tracker = self.update_evolution_tracker(
+            run_number = run_number,
+            generation = 0,
+            phase_name = phase,
+            phase_threshold = phase_threshold,
+            individual_mutation_rate = individual_mutation_rate,
+            node_mutation_prob = mutation_type_rate[0],
+            connection_mutation_prob = mutation_type_rate[1],
+            switch_mutation_prob = mutation_type_rate[2],
+            population = population,
+            save_to_file = True
+        )
+
+        print(f"Generation 0 of {self.generations} in phase {phase}.")
+
+        for generation in range(1, self.generations + 1):
+
+            # Update phase if threshold has been reached
+            if generation >= phase_threshold:
+
+                print('Phase threshold reached. Moving to next phase...')
+                phase_number += 1
+                phase = self.phase_names[phase_number]
+                phase_threshold = self.phase_thresholds[phase_number]
+                individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
+                mutation_type_rate = self.phases[phase]['mutation_type_rate']
+
+            print(f"Generation {generation} of {self.generations} in phase {phase} with individual mutation rate of {individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], mutation_type_rate))}.")
+            
+            print(f"Generating offspring...")
+            population.generate_offspring()
+
+            print("Mutating population")
+            for i in range(len(population.population)):
+                individual = population.population[i]
+                individual.is_mutated = False
+                if np.random.rand() < individual_mutation_rate:
+                    mutation_type = np.random.choice(['node', 'connection', 'switch'], p = mutation_type_rate)
+                    print(f"Attempting {mutation_type} mutation for individual {individual.id}: {i} of {len(population.population)}.")
+                    if mutation_type == 'node':
+                        node = self.search_space.sample_from_search_space(n_samples = 1)[0]
+                        individual.add_node(individual.graph, node)
+                    elif mutation_type == 'connection':
+                        individual.add_edge(individual.graph)
+                    else:
+                        individual.switch_connection()
+
+                if individual.is_trained == False:
+                    
+                    print(f"Training individual {individual.id}: {i} of {len(population.population)}.")
+                    normal_cell_graph = individual.reduced_graph(individual.graph)
+                    normal_cell = BuildLayer(normal_cell_graph)
+                    model_compiler = ModelCompiler(self.input_graph, normal_cell_graph, self.output_graph, self.reduction_cell_graph, self.normal_cell_repeats, self.substructure_repeats)
+                    model = model_compiler.build_model(input_shape = (None,) + self.train_data[0].shape[1:])
+                    for layer in model.layers:
+                        if 'NC' in layer.name:
+                            num_params = sum(tf.keras.backend.count_params(p) for p in layer.trainable_weights)
+                            maximum_params = np.max([num_params, maximum_params])
+                            break
+
+                    
+                    history = model_compiler.train_model(train_data = self.train_data, validation_data = self.validation_data, model = model)
+                    individual.training_history = history.history
+                    individual.is_trained = True
+                    individual.training_time = history.history['training_time']
+                    individual.training_accuracy = history.history['accuracy'][-1]
+                    individual.training_loss = history.history['mse'][-1]
+                    individual.validation_accuracy = history.history['val_accuracy'][-1]
+                    individual.validation_loss = history.history['val_mse'][-1]
+                    individual.number_of_params = num_params
+                    individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+
+                individual.age += 1
+
+            print("Applying speciation to new population")
+            population.speciation(generation)
+
+
+            evolution_tracker = self.update_evolution_tracker(
+                run_number = run_number,
+                generation = generation,
+                phase_name = phase,
+                phase_threshold = phase_threshold,
+                individual_mutation_rate = individual_mutation_rate,
+                node_mutation_prob = mutation_type_rate[0],
+                connection_mutation_prob = mutation_type_rate[1],
+                switch_mutation_prob = mutation_type_rate[2],
+                population = population,
+                save_to_file = True
+            )
+
+        return population
+
+
+    def run_evolution(self):
+        experiments = []
+        for run_number in range(1, self.number_of_runs + 1):
+            print(f"Starting evolutionary run {run_number} of {self.number_of_runs}.")
+            experiments.append(self.single_run(run_number))
+        return experiments
