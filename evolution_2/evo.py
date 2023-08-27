@@ -1,10 +1,20 @@
 import numpy as np
+import pandas as pd
 from copy import deepcopy
 import networkx as nx
 import uuid
 import itertools
 from math import fsum
-
+from itertools import accumulate
+import datetime
+import os
+import pickle
+from dataclasses import dataclass
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, Dense, MaxPooling2D, AveragePooling2D, SpatialDropout2D, GlobalAveragePooling2D, Flatten, Lambda, Concatenate, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras import Sequential
+from tensorflow.keras import backend 
+import time
 
 class Individual:
 
@@ -103,6 +113,8 @@ class Individual:
         valid_nodes = self.valid_nodes(connected_graph, source, target)
         reduced_graph = nx.DiGraph()
         reduced_graph.add_weighted_edges_from([(a, b, 1.0) for a,b in connected_graph.edges() if a in valid_nodes and b in valid_nodes])
+        for node in valid_nodes:
+            nx.set_node_attributes(reduced_graph, {node:G.nodes[node]})
         return reduced_graph
 
     def maximum_possible_edges(self, G: nx.DiGraph) -> int:
@@ -151,16 +163,21 @@ class Individual:
             edge = edges.pop(np.random.randint(len(edges)))
             if G[edge[0]][edge[1]]['weight'] == 1.0:
                 G[edge[0]][edge[1]]['weight'] = 0.0
-                reduced_graph = self.reduced_graph(G, source, target)
-                for path in nx.all_simple_paths(reduced_graph, source, target):
-                    if source in path and target in path:
-                        switched = True
-                        self.switch_mutation = (edge[0], edge[1], 0)
-                        self.is_mutated = True
-                        self.is_trained = False
-                        break
-                    else:
-                        G[edge[0]][edge[1]]['weight'] = 1.0
+                try:
+                    reduced_graph = self.reduced_graph(G, source, target)
+                    for path in nx.all_simple_paths(reduced_graph, source, target):
+                        if source in path and target in path:
+                            switched = True
+                            self.switch_mutation = (edge[0], edge[1], 0)
+                            self.is_mutated = True
+                            self.is_trained = False
+                            break
+
+                except:
+                    print("warning: no paths to switch")
+                
+                G[edge[0]][edge[1]]['weight'] = 1.0
+
             else:
                 G[edge[0]][edge[1]]['weight'] = 1.0
                 self.switch_mutation = (edge[0], edge[1], 1)
@@ -285,14 +302,14 @@ class Species:
         if individual not in self.members:
             self.members.append(individual)
         else:
-            print(f"Warning: Individual {self.self.individual} already in species {self}.")
+            print(f"Warning: Individual {individual} already in species {self.id}.")
 
 
     def remove_member(self, individual: Individual) -> None:
         if individual in self.members:
             self.members.remove(individual)
         else:
-            print(f"Warning: Individual {individual} not in species {self}.")
+            print(f"Warning: Individual {individual} not in species {self.id}.")
 
 
     def update_representative(self) -> None:
@@ -318,7 +335,7 @@ class Species:
     
     def similarity(self, individual: Individual, c1: float = 0.5, c2: float = 1.0) -> float:
         connection_similarity = self.sorensen_dice(set(self.representative.graph.edges()), set(individual.graph.edges()))
-        path_similarity = self.sorensen_dice(set(self.representative.get_path_genes()), set(individual.get_path_genes()))
+        path_similarity = self.sorensen_dice(set([tuple(path) for path in self.representative.get_path_genes()]), set([tuple(path) for path in individual.get_path_genes()]))
         return (c1*connection_similarity + c2*path_similarity)/(c1 + c2)
     
     def path_to_edges(self, path: list[str]) -> list[tuple[str,str]]:
@@ -503,7 +520,8 @@ class Population:
                     species.remove_member(individual)
     
     def speciation(self, generation: int, c1: float = 0.5, c2: float = 1.0, similarity_threshold: float = 0.5, maximum_species_proportion: float = 0.2) -> None:
-        species.update_representative()
+        for species in self.species:
+            species.update_representative()
         self.reset_species()
         for individual in self.population:
             species_found = False
@@ -540,14 +558,14 @@ class Population:
     def maximum_unique_pairs(self, n: int = 2) -> int:
         return int(n*(n-1)/2)
     
-    def generate_offspring(self, percentage_offspring: float = 0.5) -> None:
+    def generate_offspring(self, offspring_proportion: float = 0.5) -> None:
         
         shared_fitness = np.array([species.shared_fitness for species in self.species])/np.sum([species.shared_fitness for species in self.species])
 
         next_gen_species_count = np.round(self.population_size * shared_fitness, 0).astype(int)
-        n_offspring = np.floor(next_gen_species_count*percentage_offspring).astype(int)
+        n_offspring = np.floor(next_gen_species_count*offspring_proportion).astype(int)
 
-        leftover_offspring = self.population_size*percentage_offspring - np.sum(n_offspring)
+        leftover_offspring = self.population_size*offspring_proportion - np.sum(n_offspring)
 
         n_offspring = n_offspring + np.random.multinomial(leftover_offspring, shared_fitness)
         
@@ -572,14 +590,14 @@ class Population:
                 self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)
 
                 parent_list = sorted(list(itertools.combinations(self.species[i].members, 2)), key = lambda x: x[0].fitness + x[1].fitness, reverse = True)
-                print(parent_list)
 
-                i = 0
+                n_generated = 0
                 
-                while i < n_offspring[i]:
+                while n_generated < n_offspring[i]:
                     self.species[i].remove_member(self.species[i].members[-1])
                     parents = parent_list.pop(0)
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+                    n_generated += 1
 
 
 class BuildLayer(Layer):
@@ -632,18 +650,18 @@ class BuildLayer(Layer):
         self.defined_nodes = [None  for _ in range(len(self.nodes))]
         for i in range(len(self.nodes)):
 
-            layer = self.layers[i]
             node_inputs = list(self.graph.predecessors(self.nodes[i]))
 
             if len(node_inputs) == 0:
-                self.defined_nodes[i] = layer(x)
+
+                self.defined_nodes[i] = self.layers[i](x)
 
             elif len(node_inputs) == 1:
-                self.defined_nodes[i] = layer(self.defined_nodes[self.nodes.index(node_inputs[0])])
+                self.defined_nodes[i] = self.layers[i](self.defined_nodes[self.nodes.index(node_inputs[0])])
 
             else:
                 concat = Concatenate()([self.defined_nodes[self.nodes.index(node_input)] for node_input in node_inputs])
-                self.defined_nodes[self.nodes.index(self.nodes[i])] = layer(concat)
+                self.defined_nodes[self.nodes.index(self.nodes[i])] = self.layers[i](concat)
         return self.defined_nodes[-1]
 
 
@@ -652,18 +670,11 @@ class ModelCompiler():
     def __init__(
         self,
         input_graph: nx.DiGraph,
-        normal_cell_graph: nx.DiGraph,
         output_graph: nx.DiGraph,
-        reduction_cell_graph: nx.DiGraph,
+        normal_cell_graph: nx.DiGraph = None,
+        reduction_cell_graph: nx.DiGraph = None,
         normal_cell_repeats: int = 3,
-        substructure_repeats: int = 3,
-        validation_data: tuple[np.ndarray] = None,
-        batch_size: int = 32, 
-        epochs: int = 2, 
-        verbose: int = 1,
-        optimizer: str = 'adam',
-        loss: str = 'categorical_crossentropy',
-        metrics: list[str] = ['accuracy']
+        substructure_repeats: int = 3
 
     ) -> None:
         self.input_graph = input_graph
@@ -678,17 +689,20 @@ class ModelCompiler():
         input_layer = Input(shape = input_shape, name = 'Input Layer')
         x = BuildLayer(self.input_graph, name = 'IC')(input_layer)
         for M in range(self.substructure_repeats):
-            for N in range(self.normal_cell_repeats):
-                x = BuildLayer(self.normal_cell_graph, name = 'NC_' + str(M + 1) + '_' + str(N + 1))(x)
-            x = BuildLayer(self.reduction_cell_graph, name = 'RC_' + str(M + 1))(x)
+            if self.normal_cell_graph is not None:
+                for N in range(self.normal_cell_repeats):
+                    x = BuildLayer(self.normal_cell_graph, name = 'NC_' + str(M + 1) + '_' + str(N + 1))(x)
+            if self.reduction_cell_graph is not None:
+                x = BuildLayer(self.reduction_cell_graph, name = 'RC_' + str(M + 1))(x)
         x = BuildLayer(self.output_graph, name = 'OC')(x)
         return Model(inputs = input_layer, outputs = x)
 
 
     def train_model(
-        train_data: tuple[np.ndarray], 
+        self,
+        training_data: tuple[np.ndarray, np.ndarray],
+        validation_data: tuple[np.ndarray, np.ndarray],
         model: Model,
-        validation_data: tuple[np.ndarray] = None,
         batch_size: int = 32, 
         epochs: int = 2, 
         verbose: int = 1,
@@ -705,8 +719,8 @@ class ModelCompiler():
         if measure_time:
             start_time = time.time()
         history = model.fit(
-            x = train_data[0],
-            y = train_data[1],
+            x = training_data[0],
+            y = training_data[1],
             batch_size = batch_size,
             epochs = epochs,
             verbose = verbose,
@@ -718,10 +732,8 @@ class ModelCompiler():
         return history
     
 
-from dataclasses import dataclass
-
 @dataclass
-class EvolutionTracker:
+class ExperimentTracker:
 
     date_time: str
     run_number: int
@@ -773,11 +785,12 @@ class Evolution():
         input_graph: nx.DiGraph,
         output_graph: nx.DiGraph,
         reduction_cell_graph: nx.DiGraph,
-        train_data: tuple[np.ndarray], 
-        validation_data: tuple[np.ndarray],
+        run_train_data: tuple[np.ndarray, np.ndarray], 
+        run_validation_data: tuple[np.ndarray, np.ndarray],
         population_size: int = 10,
         initialisation_type: str = 'minimal',
         generations: int = 2,
+        offspring_proportion: float = 0.5,
         phases: dict = {
             'rapid_expansion':{
                 'generation_percentage':0.1,
@@ -799,7 +812,8 @@ class Evolution():
         substructure_repeats: int = 3,
         parameter_limit: int = 100000,
         complexity_penalty: float = 0.5,
-        number_of_runs: int = 1
+        number_of_runs: int = 1,
+        seed: int = 42
 
     ) -> None:
         self.search_space = search_space
@@ -809,19 +823,21 @@ class Evolution():
         self.population_size = population_size
         self.initialisation_type = initialisation_type
         self.generations = generations
+        self.offspring_proportion = offspring_proportion
         self.phases = phases
         self.phase_names = list(phases.keys())
         self.phase_thresholds = np.array(list(accumulate([self.phases[phase]['generation_percentage']*self.generations for phase in self.phase_names])))
         self.normal_cell_repeats = normal_cell_repeats
         self.substructure_repeats = substructure_repeats
-        self.train_data = train_data
-        self.validation_data = validation_data
+        self.run_train_data = run_train_data
+        self.run_validation_data = run_validation_data
         self.parameter_limit = parameter_limit
         self.complexity_penalty = complexity_penalty
         self.number_of_runs = number_of_runs
+        self.seed = seed
 
     
-    def update_evolution_tracker(
+    def update_experiment_tracker(
         self,
         run_number: int,
         generation: int,
@@ -831,17 +847,18 @@ class Evolution():
         node_mutation_prob: float,
         connection_mutation_prob: float,
         switch_mutation_prob: float,
-        population: Population,
-        evolution_tracker: dict = {},
+        individuals: list[Individual],
+        run_tracker: dict = {},
         save_to_file: bool = False,
-        location: str = 'experiments'
+        location: str = 'experiments',
+        run_type: str = 'evolution'
     ) -> dict:
         
         run_id = 'r' + str(run_number) + '_g' + str(generation)
 
-        evolution_tracker[run_id] = {
-            'r' + str(run_number) + '_g' + str(generation) + '_i' + str(i):EvolutionTracker(
-                date_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        run_tracker[run_id] = {
+            'r' + str(run_number) + '_g' + str(generation) + '_i' + str(i):ExperimentTracker(
+                date_time = datetime.datetime.now(),
                 run_number = run_number,
                 generation = generation,
                 phase_name = phase_name,
@@ -850,25 +867,25 @@ class Evolution():
                 node_mutation_prob = node_mutation_prob,
                 connection_mutation_prob = connection_mutation_prob,
                 switch_mutation_prob = switch_mutation_prob,
-                individual = population.population[i]
+                individual = individuals[i]
             )
 
-            for i in range(len(population.population))
+            for i in range(len(individuals))
         }
 
         if save_to_file:
-            self.pickle_evolution_tracker(evolution_tracker[run_id], filename = run_id, location = location)
+            self.pickle_experiment_tracker(run_tracker[run_id], filename = run_id, location = location, run_type = run_type)
 
-        return evolution_tracker
+        return run_tracker
     
     
-    def pickle_evolution_tracker(self, evolution_tracker: dict, filename: str, location: str = 'experiments') -> None:
+    def pickle_experiment_tracker(self, evolution_tracker: dict, filename: str, location: str = 'experiments', run_type: str = 'evolution') -> None:
 
         if '.pkl' not in filename:
             filename += '.pkl'
 
         cwd = os.getcwd()
-        path_dir = os.path.join(cwd, location)
+        path_dir = os.path.join(cwd, location, run_type)
         path_file = os.path.join(path_dir, filename)
 
         if not os.path.exists(path_dir):
@@ -876,10 +893,28 @@ class Evolution():
 
         with open(path_file, 'wb') as f:
             pickle.dump(evolution_tracker, f)
+
+
+    def pickle_to_pandas_dataframe(self, experiment_folder_path: str) -> pd.DataFrame:
+
+        no_df = True
+
+        for file_name in os.listdir(experiment_folder_path):
+            path = os.path.join(experiment_folder_path, file_name)
+            loaded_data = pickle.load(open(path, 'rb'))
+
+            for key in loaded_data.keys():
+                if no_df:
+                    df = pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [0])
+                    no_df = False
+
+                else:
+                    df = pd.concat([df, pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [df.shape[0]])])
+        return df
     
     
     
-    def single_run(self, run_number: int):
+    def single_evolutionary_run(self, run_number: int):
 
         # Initialise population
         print(f"Initialising a {self.initialisation_type} population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
@@ -894,7 +929,7 @@ class Evolution():
         mutation_type_rate = self.phases[phase]['mutation_type_rate']
         maximum_params = 0
 
-        evolution_tracker = self.update_evolution_tracker(
+        evolution_tracker = self.update_experiment_tracker(
             run_number = run_number,
             generation = 0,
             phase_name = phase,
@@ -903,7 +938,7 @@ class Evolution():
             node_mutation_prob = mutation_type_rate[0],
             connection_mutation_prob = mutation_type_rate[1],
             switch_mutation_prob = mutation_type_rate[2],
-            population = population,
+            individuals = population.population,
             save_to_file = True
         )
 
@@ -924,7 +959,7 @@ class Evolution():
             print(f"Generation {generation} of {self.generations} in phase {phase} with individual mutation rate of {individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], mutation_type_rate))}.")
             
             print(f"Generating offspring...")
-            population.generate_offspring()
+            population.generate_offspring(offspring_proportion=self.offspring_proportion)
 
             print("Mutating population")
             for i in range(len(population.population)):
@@ -932,30 +967,35 @@ class Evolution():
                 individual.is_mutated = False
                 if np.random.rand() < individual_mutation_rate:
                     mutation_type = np.random.choice(['node', 'connection', 'switch'], p = mutation_type_rate)
-                    print(f"Attempting {mutation_type} mutation for individual {individual.id}: {i} of {len(population.population)}.")
+                    print(f"Attempting {mutation_type} mutation for individual {individual.id}: {i + 1} of {len(population.population)}.")
                     if mutation_type == 'node':
                         node = self.search_space.sample_from_search_space(n_samples = 1)[0]
                         individual.add_node(individual.graph, node)
                     elif mutation_type == 'connection':
                         individual.add_edge(individual.graph)
                     else:
-                        individual.switch_connection()
+                        individual.switch_edge_weight(individual.graph)
 
                 if individual.is_trained == False:
                     
-                    print(f"Training individual {individual.id}: {i} of {len(population.population)}.")
+                    print(f"Training individual {individual.id}: {i + 1} of {len(population.population)}.")
                     normal_cell_graph = individual.reduced_graph(individual.graph)
-                    normal_cell = BuildLayer(normal_cell_graph)
-                    model_compiler = ModelCompiler(self.input_graph, normal_cell_graph, self.output_graph, self.reduction_cell_graph, self.normal_cell_repeats, self.substructure_repeats)
-                    model = model_compiler.build_model(input_shape = (None,) + self.train_data[0].shape[1:])
+                    model_compiler = ModelCompiler(
+                        input_graph=self.input_graph, 
+                        output_graph=self.output_graph, 
+                        normal_cell_graph=normal_cell_graph, 
+                        reduction_cell_graph=self.reduction_cell_graph, 
+                        normal_cell_repeats=self.normal_cell_repeats, 
+                        substructure_repeats=self.substructure_repeats
+                        )
+                    model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
                     for layer in model.layers:
                         if 'NC' in layer.name:
-                            num_params = sum(tf.keras.backend.count_params(p) for p in layer.trainable_weights)
+                            num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
                             maximum_params = np.max([num_params, maximum_params])
                             break
 
-                    
-                    history = model_compiler.train_model(train_data = self.train_data, validation_data = self.validation_data, model = model)
+                    history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
                     individual.training_history = history.history
                     individual.is_trained = True
                     individual.training_time = history.history['training_time']
@@ -972,7 +1012,7 @@ class Evolution():
             population.speciation(generation)
 
 
-            evolution_tracker = self.update_evolution_tracker(
+            evolution_tracker = self.update_experiment_tracker(
                 run_number = run_number,
                 generation = generation,
                 phase_name = phase,
@@ -981,16 +1021,143 @@ class Evolution():
                 node_mutation_prob = mutation_type_rate[0],
                 connection_mutation_prob = mutation_type_rate[1],
                 switch_mutation_prob = mutation_type_rate[2],
-                population = population,
+                individuals = population.population,
                 save_to_file = True
             )
 
         return population
 
+    
 
-    def run_evolution(self):
+    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 20, lowest_connection_density: float = 0.25):
+        # Initialise population
+        print(f"Initialising a random population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
+        population = [Individual() for _ in range(self.population_size)]
+        i = 0
+        maximum_params = 0
+        for individual in population:
+            n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
+            samples = self.search_space.sample_from_search_space(n_samples = n_samples)
+            connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
+            individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
+            normal_cell_graph = individual.reduced_graph(individual.graph)
+            model_compiler = ModelCompiler(
+                        input_graph=self.input_graph, 
+                        output_graph=self.output_graph, 
+                        normal_cell_graph=normal_cell_graph, 
+                        reduction_cell_graph=self.reduction_cell_graph, 
+                        normal_cell_repeats=self.normal_cell_repeats, 
+                        substructure_repeats=self.substructure_repeats
+                        )
+            
+            print(f"Training individual {individual.id}: {i + 1} of {self.population_size}.")
+            model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
+            for layer in model.layers:
+                if 'NC' in layer.name:
+                    num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
+                    maximum_params = np.max([num_params, maximum_params])
+                    break
+
+            history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
+            individual.training_history = history.history
+            individual.is_trained = True
+            individual.training_time = history.history['training_time']
+            individual.training_accuracy = history.history['accuracy'][-1]
+            individual.training_loss = history.history['mse'][-1]
+            individual.validation_accuracy = history.history['val_accuracy'][-1]
+            individual.validation_loss = history.history['val_mse'][-1]
+            individual.number_of_params = num_params
+            individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+            i += 1
+        
+        random_run_tracker = self.update_experiment_tracker(
+            run_number = run_number,
+            generation = 0,
+            phase_name = None,
+            phase_threshold = None,
+            individual_mutation_rate = None,
+            node_mutation_prob = None,
+            connection_mutation_prob = None,
+            switch_mutation_prob = None,
+            individuals = population,
+            save_to_file = True,
+            run_type = 'random'
+        )
+        
+        for generation in range(1, self.generations + 1):
+            print(f"Generation {generation} of {self.generations}.")
+            for i in range(np.max([1, int(self.population_size*self.offspring_proportion)])):
+                population = sorted(population, key = lambda x: x.fitness, reverse = True)
+                min_fitness = population[-1].fitness
+
+
+                individual = Individual()
+                n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
+                samples = self.search_space.sample_from_search_space(n_samples = n_samples)
+                connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
+                individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
+                normal_cell_graph = individual.reduced_graph(individual.graph)
+                model_compiler = ModelCompiler(
+                            input_graph=self.input_graph, 
+                            output_graph=self.output_graph, 
+                            normal_cell_graph=normal_cell_graph, 
+                            reduction_cell_graph=self.reduction_cell_graph, 
+                            normal_cell_repeats=self.normal_cell_repeats, 
+                            substructure_repeats=self.substructure_repeats
+                            )
+                
+                print(f"Training individual {individual.id}: {i + 1} of {np.max([1, int(self.population_size*self.offspring_proportion)])}.")
+                model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
+                for layer in model.layers:
+                    if 'NC' in layer.name:
+                        num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
+                        maximum_params = np.max([num_params, maximum_params])
+                        break
+
+                history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
+                individual.training_history = history.history
+                individual.is_trained = True
+                individual.training_time = history.history['training_time']
+                individual.training_accuracy = history.history['accuracy'][-1]
+                individual.training_loss = history.history['mse'][-1]
+                individual.validation_accuracy = history.history['val_accuracy'][-1]
+                individual.validation_loss = history.history['val_mse'][-1]
+                individual.number_of_params = num_params
+                individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+                
+                if individual.fitness > min_fitness:
+                    population[-1] = individual
+
+
+            random_run_tracker = self.update_experiment_tracker(
+                run_number = run_number,
+                generation = generation,
+                phase_name = None,
+                phase_threshold = None,
+                individual_mutation_rate = None,
+                node_mutation_prob = None,
+                connection_mutation_prob = None,
+                switch_mutation_prob = None,
+                individuals = population,
+                save_to_file = True,
+                run_type = 'random'
+            )
+
+        return population
+    
+
+
+
+    def run_multiple_experiments(self, experiment_type: str = 'evolution') -> None:
+        assert experiment_type in ['evolution', 'random'], "Experiment type must be either 'evolution' or 'random'."
+        np.random.seed(self.seed)
         experiments = []
         for run_number in range(1, self.number_of_runs + 1):
-            print(f"Starting evolutionary run {run_number} of {self.number_of_runs}.")
-            experiments.append(self.single_run(run_number))
+            print(f"Starting {experiment_type} run {run_number} of {self.number_of_runs}.")
+            if experiment_type == 'evolution':
+                population = self.single_evolutionary_run(run_number)
+
+            else:
+                population = self.single_random_run(run_number)
+            experiments.append(population)
         return experiments
