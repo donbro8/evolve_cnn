@@ -1049,7 +1049,6 @@ class Evolution():
 
                 if individual.is_trained == False:
                     print(f"Attempting training of individual {individual.id}: {i + 1} of {len(population.population)}.")
-
                     
                     maximum_params = self.train_individual(individual, maximum_params)
 
@@ -1112,7 +1111,6 @@ class Evolution():
             for i in range(np.max([1, int(self.population_size*self.offspring_proportion)])):
                 population = sorted(population, key = lambda x: x.fitness, reverse = True)
                 min_fitness = population[-1].fitness
-
 
                 individual = Individual()
                 n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
