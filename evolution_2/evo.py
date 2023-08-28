@@ -15,6 +15,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras import Sequential
 from tensorflow.keras import backend 
 import time
+from IPython.display import clear_output
 
 class Individual:
 
@@ -205,7 +206,7 @@ class Individual:
                     self.add_edge(G)
 
 
-    def fitness_function(self, x, y, y_max, y_limit: int = 10000, beta:float = 0.5):
+    def fitness_function(self, x, y, y_max, y_limit: int = 1000000, beta:float = 0.5):
         return np.max([0, x - beta * (y/np.min([y_max, y_limit]))])
 
 
@@ -810,9 +811,15 @@ class Evolution():
         },
         normal_cell_repeats: int = 3,
         substructure_repeats: int = 3,
-        parameter_limit: int = 100000,
+        parameter_limit: int = 1000000,
         complexity_penalty: float = 0.5,
         number_of_runs: int = 1,
+        batch_size: int = 32, 
+        epochs: int = 2, 
+        verbose: int = 1,
+        optimizer: str = 'adam',
+        loss: str = 'categorical_crossentropy',
+        metrics: list[str] = ['accuracy','mse'],
         seed: int = 42
 
     ) -> None:
@@ -834,6 +841,12 @@ class Evolution():
         self.parameter_limit = parameter_limit
         self.complexity_penalty = complexity_penalty
         self.number_of_runs = number_of_runs
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.verbose = verbose
+        self.optimizer = optimizer
+        self.loss = loss
+        self.metrics = metrics
         self.seed = seed
 
     
@@ -913,6 +926,64 @@ class Evolution():
         return df
     
     
+    def train_individual(self, individual: Individual, maximum_params) -> None:
+
+        normal_cell_graph = individual.reduced_graph(individual.graph)
+
+        model_compiler = ModelCompiler(
+            input_graph=self.input_graph, 
+            output_graph=self.output_graph, 
+            normal_cell_graph=normal_cell_graph, 
+            reduction_cell_graph=self.reduction_cell_graph, 
+            normal_cell_repeats=self.normal_cell_repeats, 
+            substructure_repeats=self.substructure_repeats
+            )
+        
+        model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
+
+        for layer in model.layers:
+            if 'NC' in layer.name:
+                num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
+                maximum_params = np.max([num_params, maximum_params])
+                break
+
+        individual.number_of_params = num_params
+        
+        if num_params <= self.parameter_limit:
+            
+            history = model_compiler.train_model(
+                training_data = self.run_train_data, 
+                validation_data = self.run_validation_data, 
+                model = model,
+                batch_size = self.batch_size,
+                epochs = self.epochs, 
+                verbose = self.verbose,
+                optimizer = self.optimizer,
+                loss = self.loss,
+                metrics = self.metrics
+                )
+            
+            
+            individual.training_history = history.history
+            individual.is_trained = True
+            individual.training_time = history.history['training_time']
+            individual.training_accuracy = history.history['accuracy'][-1]
+            individual.training_loss = history.history['mse'][-1]
+            individual.validation_accuracy = history.history['val_accuracy'][-1]
+            individual.validation_loss = history.history['val_mse'][-1]
+            individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+
+        else:
+            print("Individual exceeds parameter limit. Fitness is set to zero.")
+            individual.training_history = None
+            individual.training_time = None
+            individual.training_accuracy = None
+            individual.training_loss = None
+            individual.validation_accuracy = None
+            individual.validation_loss = None
+            individual.fitness = 0
+    
+        return maximum_params
     
     def single_evolutionary_run(self, run_number: int):
 
@@ -927,7 +998,7 @@ class Evolution():
         phase_threshold = self.phase_thresholds[phase_number]
         individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
         mutation_type_rate = self.phases[phase]['mutation_type_rate']
-        maximum_params = 0
+        maximum_params = 1
 
         evolution_tracker = self.update_experiment_tracker(
             run_number = run_number,
@@ -947,7 +1018,7 @@ class Evolution():
         for generation in range(1, self.generations + 1):
 
             # Update phase if threshold has been reached
-            if generation >= phase_threshold:
+            if generation > phase_threshold:
 
                 print('Phase threshold reached. Moving to next phase...')
                 phase_number += 1
@@ -977,34 +1048,10 @@ class Evolution():
                         individual.switch_edge_weight(individual.graph)
 
                 if individual.is_trained == False:
-                    
-                    print(f"Training individual {individual.id}: {i + 1} of {len(population.population)}.")
-                    normal_cell_graph = individual.reduced_graph(individual.graph)
-                    model_compiler = ModelCompiler(
-                        input_graph=self.input_graph, 
-                        output_graph=self.output_graph, 
-                        normal_cell_graph=normal_cell_graph, 
-                        reduction_cell_graph=self.reduction_cell_graph, 
-                        normal_cell_repeats=self.normal_cell_repeats, 
-                        substructure_repeats=self.substructure_repeats
-                        )
-                    model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
-                    for layer in model.layers:
-                        if 'NC' in layer.name:
-                            num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
-                            maximum_params = np.max([num_params, maximum_params])
-                            break
+                    print(f"Attempting training of individual {individual.id}: {i + 1} of {len(population.population)}.")
 
-                    history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
-                    individual.training_history = history.history
-                    individual.is_trained = True
-                    individual.training_time = history.history['training_time']
-                    individual.training_accuracy = history.history['accuracy'][-1]
-                    individual.training_loss = history.history['mse'][-1]
-                    individual.validation_accuracy = history.history['val_accuracy'][-1]
-                    individual.validation_loss = history.history['val_mse'][-1]
-                    individual.number_of_params = num_params
-                    individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+                    
+                    maximum_params = self.train_individual(individual, maximum_params)
 
                 individual.age += 1
 
@@ -1025,6 +1072,8 @@ class Evolution():
                 save_to_file = True
             )
 
+            clear_output(wait=True)
+
         return population
 
     
@@ -1040,34 +1089,8 @@ class Evolution():
             samples = self.search_space.sample_from_search_space(n_samples = n_samples)
             connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
             individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
-            normal_cell_graph = individual.reduced_graph(individual.graph)
-            model_compiler = ModelCompiler(
-                        input_graph=self.input_graph, 
-                        output_graph=self.output_graph, 
-                        normal_cell_graph=normal_cell_graph, 
-                        reduction_cell_graph=self.reduction_cell_graph, 
-                        normal_cell_repeats=self.normal_cell_repeats, 
-                        substructure_repeats=self.substructure_repeats
-                        )
-            
-            print(f"Training individual {individual.id}: {i + 1} of {self.population_size}.")
-            model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
-            for layer in model.layers:
-                if 'NC' in layer.name:
-                    num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
-                    maximum_params = np.max([num_params, maximum_params])
-                    break
+            maximum_params = self.train_individual(individual, maximum_params)
 
-            history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
-            individual.training_history = history.history
-            individual.is_trained = True
-            individual.training_time = history.history['training_time']
-            individual.training_accuracy = history.history['accuracy'][-1]
-            individual.training_loss = history.history['mse'][-1]
-            individual.validation_accuracy = history.history['val_accuracy'][-1]
-            individual.validation_loss = history.history['val_mse'][-1]
-            individual.number_of_params = num_params
-            individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
             i += 1
         
         random_run_tracker = self.update_experiment_tracker(
@@ -1096,34 +1119,7 @@ class Evolution():
                 samples = self.search_space.sample_from_search_space(n_samples = n_samples)
                 connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
                 individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
-                normal_cell_graph = individual.reduced_graph(individual.graph)
-                model_compiler = ModelCompiler(
-                            input_graph=self.input_graph, 
-                            output_graph=self.output_graph, 
-                            normal_cell_graph=normal_cell_graph, 
-                            reduction_cell_graph=self.reduction_cell_graph, 
-                            normal_cell_repeats=self.normal_cell_repeats, 
-                            substructure_repeats=self.substructure_repeats
-                            )
-                
-                print(f"Training individual {individual.id}: {i + 1} of {np.max([1, int(self.population_size*self.offspring_proportion)])}.")
-                model = model_compiler.build_model(input_shape = self.run_train_data[0].shape[1:])
-                for layer in model.layers:
-                    if 'NC' in layer.name:
-                        num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
-                        maximum_params = np.max([num_params, maximum_params])
-                        break
-
-                history = model_compiler.train_model(training_data = self.run_train_data, validation_data = self.run_validation_data, model = model)
-                individual.training_history = history.history
-                individual.is_trained = True
-                individual.training_time = history.history['training_time']
-                individual.training_accuracy = history.history['accuracy'][-1]
-                individual.training_loss = history.history['mse'][-1]
-                individual.validation_accuracy = history.history['val_accuracy'][-1]
-                individual.validation_loss = history.history['val_mse'][-1]
-                individual.number_of_params = num_params
-                individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+                maximum_params = self.train_individual(individual, maximum_params)
                 
                 if individual.fitness > min_fitness:
                     population[-1] = individual
@@ -1142,6 +1138,8 @@ class Evolution():
                 save_to_file = True,
                 run_type = 'random'
             )
+
+            clear_output(wait=True)
 
         return population
     
