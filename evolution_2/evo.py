@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, Dense, MaxPooling2D, AveragePooling2D, SpatialDropout2D, GlobalAveragePooling2D, Flatten, Lambda, Concatenate, Input
 from tensorflow.keras.models import Model
 from tensorflow.keras import Sequential
-from tensorflow.keras import backend 
+from tensorflow.keras import backend
+from tensorflow.keras.callbacks import Callback 
 import time
 from IPython.display import clear_output
 
@@ -583,7 +584,22 @@ class Population:
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
 
                 while len(self.species[i].members) < next_gen_species_count[i]:
-                    self.species[i].add_member(Individual())
+                    offspring = Individual()
+                    conn_density = np.random.rand()*0.5 + 0.25
+                    random_member = np.random.choice(self.species[i].members)
+                    random_nodes = list(random_member.graph.nodes)
+                    n_nodes = np.random.randint(1, len(random_nodes) - 1)
+                    samples = []
+                    while True:
+                        sample_node = np.random.choice(random_nodes)
+                        sample_node_attributes = random_member.graph.nodes[sample_node]
+                        if sample_node not in ['input', 'output'] and (sample_node, sample_node_attributes) not in samples:
+                            samples.append((sample_node, sample_node_attributes))
+                        
+                        if len(samples) == n_nodes:
+                            break
+                    offspring.random_individual(offspring.graph, predefined_nodes = samples, minimum_connection_density = conn_density)
+                    self.species[i].add_member(offspring)
 
             # If there are enough/more than enough possible combinations, then we remove the worst performing
             # individuals and use every parent combination to generate offspring
@@ -666,6 +682,32 @@ class BuildLayer(Layer):
         return self.defined_nodes[-1]
 
 
+class TimeOutCallback(Callback):
+
+    def __init__(self, timeout: int = 600) -> None:
+        self.timeout = timeout
+        self.timeout_reached = False
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.start_time = time.time()
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if time.time() - self.start_time > self.timeout:
+            self.model.stop_training = True
+            self.timeout_reached = True
+
+    def on_train_batch_begin(self, batch, logs=None):
+        if time.time() - self.start_time > self.timeout:
+            self.model.stop_training = True
+            self.timeout_reached = True
+
+    def on_train_batch_end(self, batch, logs=None):
+        if time.time() - self.start_time > self.timeout:
+            self.model.stop_training = True
+            self.timeout_reached = True
+
+
+
 class ModelCompiler():
 
     def __init__(
@@ -710,7 +752,8 @@ class ModelCompiler():
         optimizer: str = 'adam',
         loss: str = 'categorical_crossentropy',
         metrics: list[str] = ['accuracy','mse'],
-        measure_time: bool = True
+        measure_time: bool = True,
+        train_timeout: int = 600
     ):
         model.compile(
             optimizer = optimizer,
@@ -719,17 +762,23 @@ class ModelCompiler():
         )
         if measure_time:
             start_time = time.time()
+
+        callback = TimeOutCallback(train_timeout)
+
         history = model.fit(
             x = training_data[0],
             y = training_data[1],
             batch_size = batch_size,
             epochs = epochs,
+            steps_per_epoch = int(np.ceil(training_data[0].shape[0] / batch_size)),
             verbose = verbose,
-            validation_data = validation_data
+            validation_data = validation_data,
+            callbacks = [callback]
         )
         if measure_time:
             end_time = time.time()
             history.history['training_time'] = end_time - start_time
+            history.history['timeout_reached'] = callback.timeout_reached
         return history
     
 
@@ -984,6 +1033,9 @@ class Evolution():
             individual.fitness = 0
     
         return maximum_params
+    
+    # def single_generation(self, population: Population, )
+    
     
     def single_evolutionary_run(self, run_number: int):
 
