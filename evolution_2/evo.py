@@ -15,8 +15,13 @@ from tensorflow.keras.models import Model
 from tensorflow.keras import Sequential
 from tensorflow.keras import backend
 from tensorflow.keras.callbacks import Callback 
+from tensorflow.compat.v1 import ConfigProto
+from tensorflow.compat.v1 import InteractiveSession
 import time
 from IPython.display import clear_output
+config = ConfigProto()
+config.gpu_options.allow_growth = True
+session = InteractiveSession(config=config)
 
 class Individual:
 
@@ -26,7 +31,7 @@ class Individual:
     def __init__(self, edges: list[tuple[str,str]] = [('input', 'output')]) -> None:
         self.graph = nx.DiGraph()
         self.graph.add_edges_from(edges, weight = 1.0)
-        self.fitness = 0.5
+        self.fitness = 0
         self.is_trained = False
         self.age = 0
         self.__class__.individual_instances.add(self)
@@ -335,7 +340,7 @@ class Species:
     def sorensen_dice(self, A: set, B: set) -> float:
         return 2*len(A.intersection(B))/(len(A) + len(B))
     
-    def similarity(self, individual: Individual, c1: float = 0.5, c2: float = 1.0) -> float:
+    def similarity(self, individual: Individual, c1: float = 1.0, c2: float = 1.0) -> float:
         connection_similarity = self.sorensen_dice(set(self.representative.graph.edges()), set(individual.graph.edges()))
         path_similarity = self.sorensen_dice(set([tuple(path) for path in self.representative.get_path_genes()]), set([tuple(path) for path in individual.get_path_genes()]))
         return (c1*connection_similarity + c2*path_similarity)/(c1 + c2)
@@ -362,7 +367,11 @@ class Species:
         individual_2_path_genes_set = set([tuple(path) for path in individual_2_path_genes])
         individual_2_paths = list(nx.all_simple_paths(individual_2.graph, 'input', 'output'))
 
-        fitness_probabilities = np.array([individual_1.fitness, individual_2.fitness])/np.sum([individual_1.fitness, individual_2.fitness])
+        if np.sum([individual_1.fitness, individual_2.fitness]) == 0:
+            fitness_probabilities = np.array([1, 1])/2
+
+        else:
+            fitness_probabilities = np.array([individual_1.fitness, individual_2.fitness])/np.sum([individual_1.fitness, individual_2.fitness])
         
 
         shared_path_genes = list(individual_1_path_genes_set.intersection(individual_2_path_genes_set))
@@ -521,7 +530,7 @@ class Population:
                 if individual != species.representative:
                     species.remove_member(individual)
     
-    def speciation(self, generation: int, c1: float = 0.5, c2: float = 1.0, similarity_threshold: float = 0.5, maximum_species_proportion: float = 0.2) -> None:
+    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.3, maximum_species_proportion: float = 0.2) -> None:
         for species in self.species:
             species.update_representative()
         self.reset_species()
@@ -562,7 +571,13 @@ class Population:
     
     def generate_offspring(self, offspring_proportion: float = 0.5) -> None:
         
-        shared_fitness = np.array([species.shared_fitness for species in self.species])/np.sum([species.shared_fitness for species in self.species])
+        if np.sum([species.shared_fitness for species in self.species]) == 0:
+            print("Warning: Shared fitness of all species is 0.")
+            print("__Sampling uniformly from species.")
+            shared_fitness = np.array([1]*len(self.species))/len(self.species)
+
+        else:
+            shared_fitness = np.array([species.shared_fitness for species in self.species])/np.sum([species.shared_fitness for species in self.species])
 
         next_gen_species_count = np.round(self.population_size * shared_fitness, 0).astype(int)
         n_offspring = np.floor(next_gen_species_count*offspring_proportion).astype(int)
@@ -605,7 +620,6 @@ class Population:
             # individuals and use every parent combination to generate offspring
             else:
                 self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)
-
                 parent_list = sorted(list(itertools.combinations(self.species[i].members, 2)), key = lambda x: x[0].fitness + x[1].fitness, reverse = True)
 
                 n_generated = 0
@@ -998,40 +1012,52 @@ class Evolution():
 
         individual.number_of_params = num_params
         
-        if num_params <= self.parameter_limit:
-            
-            history = model_compiler.train_model(
-                training_data = self.run_train_data, 
-                validation_data = self.run_validation_data, 
-                model = model,
-                batch_size = self.batch_size,
-                epochs = self.epochs, 
-                verbose = self.verbose,
-                optimizer = self.optimizer,
-                loss = self.loss,
-                metrics = self.metrics
-                )
-            
-            
-            individual.training_history = history.history
-            individual.is_trained = True
-            individual.training_time = history.history['training_time']
-            individual.training_accuracy = history.history['accuracy'][-1]
-            individual.training_loss = history.history['mse'][-1]
-            individual.validation_accuracy = history.history['val_accuracy'][-1]
-            individual.validation_loss = history.history['val_mse'][-1]
-            individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+        try:
+            if num_params <= self.parameter_limit:
+                
+                history = model_compiler.train_model(
+                    training_data = self.run_train_data, 
+                    validation_data = self.run_validation_data, 
+                    model = model,
+                    batch_size = self.batch_size,
+                    epochs = self.epochs, 
+                    verbose = self.verbose,
+                    optimizer = self.optimizer,
+                    loss = self.loss,
+                    metrics = self.metrics
+                    )
+                
+                
+                individual.training_history = history.history
+                individual.is_trained = True
+                individual.training_time = history.history['training_time']
+                individual.training_accuracy = history.history['accuracy'][-1]
+                individual.training_loss = history.history['mse'][-1]
+                individual.validation_accuracy = history.history['val_accuracy'][-1]
+                individual.validation_loss = history.history['val_mse'][-1]
+                individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
 
-        else:
-            print("Individual exceeds parameter limit. Fitness is set to zero.")
-            individual.training_history = None
-            individual.training_time = None
-            individual.training_accuracy = None
-            individual.training_loss = None
-            individual.validation_accuracy = None
-            individual.validation_loss = None
-            individual.fitness = 0
+            else:
+                print("Individual exceeds parameter limit. Fitness is set to zero.")
+                individual.training_history = None
+                individual.training_time = None
+                individual.training_accuracy = None
+                individual.training_loss = None
+                individual.validation_accuracy = None
+                individual.validation_loss = None
+                individual.fitness = 0
     
+        except Exception as e:
+            if 'RESOURCE_EXHAUSTED:  OOM when allocating tensor' in str(e):
+                print("Resource exhausted. Fitness is set to zero.")
+                individual.training_history = None
+                individual.training_time = None
+                individual.training_accuracy = None
+                individual.training_loss = None
+                individual.validation_accuracy = None
+                individual.validation_loss = None
+                individual.fitness = 0
+
         return maximum_params
     
     # def single_generation(self, population: Population, )
@@ -1129,7 +1155,7 @@ class Evolution():
 
     
 
-    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 20, lowest_connection_density: float = 0.25):
+    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 10, lowest_connection_density: float = 0.25):
         # Initialise population
         print(f"Initialising a random population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
         population = [Individual() for _ in range(self.population_size)]
