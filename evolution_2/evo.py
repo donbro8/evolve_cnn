@@ -36,7 +36,30 @@ class Individual:
         self.age = 0
         self.__class__.individual_instances.add(self)
         self.id = len(self.__class__.individual_instances)
-        self.initialise_evolution_tracker()
+        self.initialise_evolution_tracker(
+            species_id = None,
+            species_start_generation = None,
+            species_representative_id = None,
+            species_similarity_score = None,
+            species_shared_fitness = None,
+            species_number_of_members = None,
+            is_offspring = False,
+            offspring_of = None,
+            number_of_paths_inherited = None,
+            crossover_shared_with = [],
+            offspring_generated = [],
+            is_mutated = False,
+            node_mutation = None,
+            connection_mutation = None,
+            switch_mutation = None,
+            training_history = None,
+            training_time = None,
+            training_accuracy = None,
+            training_loss = None,
+            validation_accuracy = None,
+            validation_loss = None,
+            number_of_params = None
+        )
 
     def __repr__(self) -> str:
         return f"Individual {self.id} | Fitness: {self.fitness}"
@@ -195,7 +218,7 @@ class Individual:
     def ordered_nodes(self, G: nx.DiGraph) -> list[str]:
         return list(nx.topological_sort(G))
     
-    def random_individual(self, G: nx.DiGraph, predefined_nodes: list[tuple[str, dict]], minimum_connection_density = 0.75) -> None:
+    def random_individual(self, G: nx.DiGraph, predefined_nodes: list[tuple[str, dict]], minimum_connection_density = 0.5) -> None:
         while True:
             max_edges = self.maximum_possible_edges(G)
             n_edges = len(G.edges())
@@ -212,8 +235,8 @@ class Individual:
                     self.add_edge(G)
 
 
-    def fitness_function(self, x, y, y_max, y_limit: int = 1000000, beta:float = 0.5):
-        return np.max([0, x - beta * (y/np.min([y_max, y_limit]))])
+    def fitness_function(self, x, y, y_limit: int = 100000, beta:float = 0.2):
+        return np.max([0, x - beta * (y/y_limit)**2])
 
 
 
@@ -473,6 +496,12 @@ class Species:
                     offspring.graph.add_node(node_out, **individual_1.graph.nodes[node_out])
 
                 offspring.graph.add_edge(node_in, node_out, weight = individual_1.graph[node_in][node_out]['weight'])
+
+                try:
+                    nx.find_cycle(offspring.graph)
+                    offspring.graph.remove_edge(node_in, node_out, weight = individual_1.graph[node_in][node_out]['weight'])
+                except:
+                    pass
             
             elif offspring_edges[i] in individual_2_edges:
 
@@ -483,10 +512,34 @@ class Species:
                     offspring.graph.add_node(node_out, **individual_2.graph.nodes[node_out])
 
                 offspring.graph.add_edge(node_in, node_out, weight = individual_2.graph[node_in][node_out]['weight'])
+
+                try:
+                    nx.find_cycle(offspring.graph)
+                    offspring.graph.remove_edge(node_in, node_out, weight = individual_2.graph[node_in][node_out]['weight'])
+                except:
+                    pass
             
             else:
                 raise ValueError("Invalid offspring edge.")
 
+        # try:
+        #     edges_in_cycle = list(nx.find_cycle(offspring.graph))
+        #     cyclic = True
+        #     while cyclic:
+        #         n_edges = 1
+        #         rand_index = np.random.choice(len(edges_in_cycle), size = n_edges, replace = False)
+        #         for i in rand_index:
+        #             offspring.graph.remove_edge(edges_in_cycle[i][0], edges_in_cycle[i][1])
+        #         try:
+        #             edges_in_cycle = list(nx.find_cycle(offspring.graph))
+        #             for i in rand_index:
+        #                 offspring.graph.add_edge(edges_in_cycle[i][0], edges_in_cycle[i][1])
+        #             n_edges += 1
+        #         except:
+        #             cyclic = False
+        # except:
+        #     pass
+        
         offspring.offspring_of = (individual_1.id, individual_2.id)
         offspring.is_offspring = True
         offspring.number_of_paths_inherited = n_paths
@@ -507,7 +560,7 @@ class Population:
         assert initialisation_type in ['minimal', 'random'], "Initialisation type must be either 'minimal' or 'random'."
         if initialisation_type == 'random':
             assert search_space is not None, "Search space must be provided for random initialisation."
-            self.search_space = search_space
+        self.search_space = search_space
         self.population_size = population_size
         self.initialisation_type = initialisation_type
         self.species = []
@@ -530,23 +583,27 @@ class Population:
                 if individual != species.representative:
                     species.remove_member(individual)
     
-    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.3, maximum_species_proportion: float = 0.2) -> None:
+    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.2) -> None:
         for species in self.species:
             species.update_representative()
         self.reset_species()
         for individual in self.population:
             species_found = False
+            similarity_scores = []
             for species in self.species:
                 similarity_score = species.similarity(individual, c1, c2)
+                similarity_scores.append(similarity_score)
                 if similarity_score >= similarity_threshold:
                     species_found = True
                     if individual != species.representative:
                         species.add_member(individual)
                     break
             if not species_found:
-                self.species.append(Species([individual], start_generation=generation))
-                if len(self.species) > maximum_species_proportion*self.population_size:
-                    self.species.remove(sorted(self.species, key = lambda x: x.shared_fitness)[0])
+                if len(self.species) >= np.floor(maximum_species_proportion*self.population_size):
+                    self.species[np.argmax(similarity_scores)].add_member(individual)
+
+                else:
+                    self.species.append(Species([individual], start_generation=generation))
         for species in self.species:
             species.update_shared_fitness()
             for individual in species.members:
@@ -569,6 +626,26 @@ class Population:
     def maximum_unique_pairs(self, n: int = 2) -> int:
         return int(n*(n-1)/2)
     
+    # def generate_offspring(self, offspring_proportion: float = 0.5) -> None:
+
+    #     self.population = sorted(self.population, key = lambda x: x.fitness, reverse = True)[:int(self.population_size*offspring_proportion)]
+    #     species = self.species[0]
+
+    #     if np.sum([member.fitness for member in self.population]) == 0:
+    #         print("Warning: Fitness of all individuals is 0.")
+    #         print("__Sampling uniformly from population.")
+    #         probs = list(np.array([1]*len(self.population))/len(self.population))
+
+    #     else:
+    #         probs = list(np.array([member.fitness for member in self.population])/np.sum([member.fitness for member in self.population]))
+
+    #     while len(self.population) < self.population_size:
+    #         parent_1, parent_2 = np.random.choice(self.population, size = 2, replace = False, p = probs)
+    #         self.population.append(species.crossover(parent_1, parent_2))
+    #         probs.append(0)
+
+
+    
     def generate_offspring(self, offspring_proportion: float = 0.5) -> None:
         
         if np.sum([species.shared_fitness for species in self.species]) == 0:
@@ -580,15 +657,47 @@ class Population:
             shared_fitness = np.array([species.shared_fitness for species in self.species])/np.sum([species.shared_fitness for species in self.species])
 
         next_gen_species_count = np.round(self.population_size * shared_fitness, 0).astype(int)
+
+        if np.sum(next_gen_species_count) != self.population_size:
+            leftover_next_gen = self.population_size - np.sum(next_gen_species_count)
+            if leftover_next_gen < 0:
+                next_gen_species_count -= np.random.multinomial(-1*leftover_next_gen, shared_fitness)
+            else:
+                next_gen_species_count += np.random.multinomial(leftover_next_gen, shared_fitness)
+
+        print('Next species count ', next_gen_species_count)
+
         n_offspring = np.floor(next_gen_species_count*offspring_proportion).astype(int)
+
+        print('Offspring ', n_offspring)
 
         leftover_offspring = self.population_size*offspring_proportion - np.sum(n_offspring)
 
-        n_offspring = n_offspring + np.random.multinomial(leftover_offspring, shared_fitness)
+        print('Leftover offspring: ', leftover_offspring)
+
+        n_offspring += np.random.multinomial(leftover_offspring, shared_fitness)
+
+        print('Updated offspring: ', n_offspring)
         
+        offspring_count = [0]*len(self.species)
+
+        n_parents = next_gen_species_count - n_offspring
+
+        print('Number of parents: ', n_parents)
+
         for i in range(len(self.species)):
 
+            print('Length of species: ', len(self.species[i].members))
+
+            self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)[:np.max([n_parents[i], 1])]
+
+            print('Length of species after: ', len(self.species[i].members))
+            
             max_pairs = self.maximum_unique_pairs(len(self.species[i].members))
+
+            print('Max pairs: ', max_pairs)
+
+            print('Number of offspring: ', n_offspring[i])
 
             if max_pairs < n_offspring[i]:
                 
@@ -597,38 +706,54 @@ class Population:
 
                 for parents in parent_list:
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+                    offspring_count[i] += 1
+
+                print('Number of members', len(self.species[i].members))
+                print('Next gen count', next_gen_species_count[i])
 
                 while len(self.species[i].members) < next_gen_species_count[i]:
+                    print('Number of members', len(self.species[i].members))
+                    print('Next gen count', next_gen_species_count[i])
                     offspring = Individual()
-                    conn_density = np.random.rand()*0.5 + 0.25
+                    conn_density = np.random.rand()*0.4 + 0.1
                     random_member = np.random.choice(self.species[i].members)
-                    random_nodes = list(random_member.graph.nodes)
-                    n_nodes = np.random.randint(1, len(random_nodes) - 1)
-                    samples = []
-                    while True:
-                        sample_node = np.random.choice(random_nodes)
-                        sample_node_attributes = random_member.graph.nodes[sample_node]
-                        if sample_node not in ['input', 'output'] and (sample_node, sample_node_attributes) not in samples:
-                            samples.append((sample_node, sample_node_attributes))
-                        
-                        if len(samples) == n_nodes:
-                            break
+                    n_nodes = np.random.randint(1, len(random_member.graph.nodes))
+                    samples = self.search_space.sample_from_search_space(n_samples = n_nodes)
+                    # random_nodes = list(random_member.graph.nodes)
+                    # if len(random_nodes) > 2:
+                    #     n_nodes = np.random.randint(1, len(random_nodes) - 1)
+                    #     samples = []
+                    #     while True:
+                    #         sample_node = np.random.choice(random_nodes)
+                    #         sample_node_attributes = random_member.graph.nodes[sample_node]
+                    #         if sample_node not in ['input', 'output'] and (sample_node, sample_node_attributes) not in samples:
+                    #             samples.append((sample_node, sample_node_attributes))
+                            
+                    #         if len(samples) == n_nodes:
+                    #             break
                     offspring.random_individual(offspring.graph, predefined_nodes = samples, minimum_connection_density = conn_density)
                     self.species[i].add_member(offspring)
+                    offspring_count[i] += 1
 
             # If there are enough/more than enough possible combinations, then we remove the worst performing
             # individuals and use every parent combination to generate offspring
             else:
-                self.species[i].members = sorted(self.species[i].members, key = lambda x: x.fitness, reverse = True)
                 parent_list = sorted(list(itertools.combinations(self.species[i].members, 2)), key = lambda x: x[0].fitness + x[1].fitness, reverse = True)
 
-                n_generated = 0
+                # n_generated = 0
                 
-                while n_generated < n_offspring[i]:
-                    self.species[i].remove_member(self.species[i].members[-1])
+                while len(self.species[i].members) < next_gen_species_count[i]:
+                    print('Number of members', len(self.species[i].members))
+                    print('Next gen count', next_gen_species_count[i])
+                    # self.species[i].remove_member(self.species[i].members[-1])
                     parents = parent_list.pop(0)
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
-                    n_generated += 1
+                    offspring_count[i] += 1
+                    # n_generated += 1
+
+            print('Offspring generated count: ', offspring_count)
+
+        self.population = [individual for species in self.species for individual in species.members]
 
 
 class BuildLayer(Layer):
@@ -874,8 +999,8 @@ class Evolution():
         },
         normal_cell_repeats: int = 3,
         substructure_repeats: int = 3,
-        parameter_limit: int = 1000000,
-        complexity_penalty: float = 0.5,
+        parameter_limit: int = 100000,
+        complexity_penalty: float = 0.2,
         number_of_runs: int = 1,
         batch_size: int = 32, 
         epochs: int = 2, 
@@ -1035,7 +1160,7 @@ class Evolution():
                 individual.training_loss = history.history['mse'][-1]
                 individual.validation_accuracy = history.history['val_accuracy'][-1]
                 individual.validation_loss = history.history['val_mse'][-1]
-                individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, maximum_params, self.parameter_limit, self.complexity_penalty)
+                individual.fitness = individual.fitness_function(history.history['val_accuracy'][-1], num_params, self.parameter_limit, self.complexity_penalty)
 
             else:
                 print("Individual exceeds parameter limit. Fitness is set to zero.")
@@ -1069,6 +1194,16 @@ class Evolution():
         print(f"Initialising a {self.initialisation_type} population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
         population = Population(population_size = self.population_size, initialisation_type = self.initialisation_type, search_space = self.search_space)
         population.minimal_initialisation()
+        # population.random_initialisation(n_node_samples = np.random.randint(1,6))
+        i = 0
+        maximum_params = 1
+        # for individual in population.population:
+        #     n_samples = np.random.randint(2, 11)
+        #     samples = self.search_space.sample_from_search_space(n_samples = n_samples)
+        #     connection_density = np.random.rand()*0.4 + 0.1
+        #     individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
+        #     maximum_params = self.train_individual(individual, maximum_params)
+        #     i += 1
 
         # Initialise phase
         phase_number = 0
@@ -1076,7 +1211,7 @@ class Evolution():
         phase_threshold = self.phase_thresholds[phase_number]
         individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
         mutation_type_rate = self.phases[phase]['mutation_type_rate']
-        maximum_params = 1
+        # maximum_params = 1
 
         evolution_tracker = self.update_experiment_tracker(
             run_number = run_number,
@@ -1106,9 +1241,15 @@ class Evolution():
                 mutation_type_rate = self.phases[phase]['mutation_type_rate']
 
             print(f"Generation {generation} of {self.generations} in phase {phase} with individual mutation rate of {individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], mutation_type_rate))}.")
+
+            if generation > 1:
+                print("Applying speciation to new population")
+                population.speciation(generation)
+
+                print(f"Generating offspring...")
+                population.generate_offspring(offspring_proportion=self.offspring_proportion)
             
-            print(f"Generating offspring...")
-            population.generate_offspring(offspring_proportion=self.offspring_proportion)
+            self.population = population.population
 
             print("Mutating population")
             for i in range(len(population.population)):
@@ -1132,9 +1273,9 @@ class Evolution():
 
                 individual.age += 1
 
-            print("Applying speciation to new population")
-            population.speciation(generation)
+            self.population = population.population
 
+            self.population = population.population
 
             evolution_tracker = self.update_experiment_tracker(
                 run_number = run_number,
@@ -1155,7 +1296,7 @@ class Evolution():
 
     
 
-    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 10, lowest_connection_density: float = 0.25):
+    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 10):
         # Initialise population
         print(f"Initialising a random population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
         population = [Individual() for _ in range(self.population_size)]
@@ -1164,7 +1305,7 @@ class Evolution():
         for individual in population:
             n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
             samples = self.search_space.sample_from_search_space(n_samples = n_samples)
-            connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
+            connection_density = np.random.rand()*0.4 + 0.1
             individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
             maximum_params = self.train_individual(individual, maximum_params)
 
@@ -1186,19 +1327,17 @@ class Evolution():
         
         for generation in range(1, self.generations + 1):
             print(f"Generation {generation} of {self.generations}.")
-            for i in range(np.max([1, int(self.population_size*self.offspring_proportion)])):
-                population = sorted(population, key = lambda x: x.fitness, reverse = True)
-                min_fitness = population[-1].fitness
+            population = sorted(population, key = lambda x: x.fitness, reverse = True)[:np.floor(self.population_size*self.offspring_proportion)]
+            while len(population) < self.population_size:
 
                 individual = Individual()
                 n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
                 samples = self.search_space.sample_from_search_space(n_samples = n_samples)
-                connection_density = np.random.rand()*(1 - lowest_connection_density) + lowest_connection_density
+                connection_density = np.random.rand()*0.4 + 0.1
                 individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
                 maximum_params = self.train_individual(individual, maximum_params)
                 
-                if individual.fitness > min_fitness:
-                    population[-1] = individual
+                population.append(individual)
 
 
             random_run_tracker = self.update_experiment_tracker(
