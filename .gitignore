@@ -143,3 +143,5 @@ __pycache__
 *.pdf
 model_cnn_ga.ipynb
 *.png
+*.txt
+*.ipynb
