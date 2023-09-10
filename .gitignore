@@ -145,3 +145,4 @@ model_cnn_ga.ipynb
 *.png
 *.txt
 *.ipynb
+alerter.yaml
