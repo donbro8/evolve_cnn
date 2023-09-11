@@ -64,6 +64,7 @@ try:
     for experiment in experiment_types:
         running_experiment = experiment
         outputs.append(evolution.run_multiple_experiments(experiment_type = running_experiment))
+        send_email_alert(subject=f"Experiment '{running_experiment}' completed", message=f"Experiment '{running_experiment}' completed successfully.")
 except Exception as e:
     traceback_info = traceback.format_exc()
     send_email_alert(subject=f"Experiment '{running_experiment}' failed", message=f"Exception: {e} \n {traceback_info}")

@@ -13,7 +13,7 @@ def send_email_alert(subject: str, message: str):
     port = 465  # For SSL
     smtp_server = "smtp.gmail.com"
 
-    config = load_config('alerter.yaml')
+    config = load_config('configs/alerter.yaml')
 
     sender_email = config['sender_email']
     receiver_email = config['receiver_email']

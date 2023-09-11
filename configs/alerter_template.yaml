@@ -1,4 +1,4 @@
-# Rename to alerter.yaml after editing
+# Rename to alerter.yaml after filling in relevant details
 
 sender_email: your_gmail_email_address
 receiver_email: receiver_email_address
