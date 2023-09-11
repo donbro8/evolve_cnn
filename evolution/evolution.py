@@ -416,7 +416,7 @@ class Evolution():
         
         for generation in range(1, self.generations + 1):
             print(f"Generation {generation} of {self.generations}.")
-            population = sorted(population, key = lambda x: x.fitness, reverse = True)[:np.floor(self.population_size*self.offspring_proportion)]
+            population = sorted(population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(self.population_size*self.offspring_proportion))]
             while len(population) < self.population_size:
 
                 individual = Individual()
