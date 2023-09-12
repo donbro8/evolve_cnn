@@ -385,7 +385,7 @@ class Evolution():
 
     
 
-    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 10):
+    def single_random_run(self, run_number: int, minum_node_samples: int = 1, maximum_node_samples: int = 21):
         # Initialise population
         print(f"Initialising a random population of size {self.population_size} for run {run_number} of {self.number_of_runs}.")
         population = [Individual() for _ in range(self.population_size)]
