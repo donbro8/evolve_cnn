@@ -141,7 +141,6 @@ __pycache__
 *.pyc
 *.gv
 *.pdf
-model_cnn_ga.ipynb
 *.png
 *.txt
 *.ipynb

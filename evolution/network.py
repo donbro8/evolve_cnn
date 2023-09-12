@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, Dense, MaxPooling2D, AveragePooling2D, SpatialDropout2D, GlobalAveragePooling2D, Flatten, Lambda, Concatenate, Input
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, Dense, MaxPooling2D, AveragePooling2D, SpatialDropout2D, GlobalAveragePooling2D, Flatten, Lambda, Concatenate, Input, ReLU
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import Callback 
 import time
@@ -32,6 +32,8 @@ class BuildLayer(Layer):
                 self.layers.append(GlobalAveragePooling2D())
             elif node_type == 'Flatten':
                 self.layers.append(Flatten())
+            elif node_type == 'ReLU':
+                self.layers.append(ReLU())
             elif node_type in ['Identity', 'input', 'output']:
                 self.layers.append(Lambda(lambda x: x))
             else:
