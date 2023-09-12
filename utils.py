@@ -7,6 +7,9 @@ import keras
 import json
 import datetime
 from evolution.network import ModelCompiler
+import pandas as pd
+import os
+import pickle
 
 def load_config(path: str):
     with open(path) as f:
@@ -106,10 +109,17 @@ def paretoset(df, field1, field2, minimize1 = True, minimize2 = True):
     for i in range(len(df)):
         for j in range(len(df)):
             if i != j:
-                if minimize1 and minimize2:
+
+                if df_pareto[field1].iloc[i] is None or df_pareto[field2].iloc[i] is None or df_pareto[field1].iloc[j] is None or df_pareto[field2].iloc[j] is None:
+                        df_pareto['pareto'].iloc[i] = 0
+                        continue
+
+                elif minimize1 and minimize2:
+
                     if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
                         if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
                             df_pareto['pareto'].iloc[i] = 0
+
                 elif minimize1 and not minimize2:
                     if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
                         if df_pareto[field2].iloc[i] < df_pareto[field2].iloc[j]:
@@ -252,3 +262,21 @@ def plot_model_graph(model_graph: nx.DiGraph, filename: str = None, directory: s
     if filename is None:
         filename = 'model_graph'
     dot.render(filename=filename, directory = directory, view=True)
+
+
+def pickle_to_pandas_dataframe(experiment_folder_path: str) -> pd.DataFrame:
+
+    no_df = True
+
+    for file_name in os.listdir(experiment_folder_path):
+        path = os.path.join(experiment_folder_path, file_name)
+        loaded_data = pickle.load(open(path, 'rb'))
+
+        for key in loaded_data.keys():
+            if no_df:
+                df = pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [0])
+                no_df = False
+
+            else:
+                df = pd.concat([df, pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [df.shape[0]])])
+    return df
