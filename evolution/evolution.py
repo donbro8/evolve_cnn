@@ -9,6 +9,7 @@ from itertools import accumulate
 import os
 import pickle
 import pandas as pd
+import gc
 from tensorflow.keras import backend
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
@@ -281,6 +282,7 @@ class Evolution():
                 individual.validation_loss = None
                 individual.fitness = 0
 
+        gc.collect()
         backend.clear_session()
         return maximum_params
     
