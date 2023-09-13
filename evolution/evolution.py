@@ -281,6 +281,7 @@ class Evolution():
                 individual.validation_loss = None
                 individual.fitness = 0
 
+        backend.clear_session()
         return maximum_params
     
     # def single_generation(self, population: Population, )
