@@ -1,5 +1,7 @@
 try:
     experiment_types = ['evolution', 'random']
+    from utils import *
+    experiment_params = load_config('configs/experiment_params.yaml')
 
     for experiment in experiment_types:
         running_experiment = experiment
