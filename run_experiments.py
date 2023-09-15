@@ -1,11 +1,14 @@
 try:
-    experiment_types = ['evolution', 'random']
+    
     from utils import *
     experiment_params = load_config('configs/experiment_params.yaml')
-
-    for experiment in experiment_types:
-        running_experiment = experiment
-        for run_number in range(1, experiment_params['number_of_runs'] + 1):
+    
+    for experiment_run_number in range(1, experiment_params['number_of_runs'] + 1):
+        
+        experiment_types = ['evolution', 'random']
+        
+        for experiment in experiment_types:
+        
             from utils import *
             from evolution.evolution import *
             from evolution.network import *
@@ -13,6 +16,7 @@ try:
             from evolution.search_space import *
             import traceback
             import sys
+            import gc
 
             experiment_params = load_config('configs/experiment_params.yaml')
             print(experiment_params)
@@ -62,27 +66,31 @@ try:
                 loss = experiment_params['loss'],
                 metrics = experiment_params['metrics']
             )
-            print(f"Starting {running_experiment} run {run_number} of {experiment_params['number_of_runs']}.")
-            if running_experiment == 'evolution':
-                population = evolution.single_evolutionary_run(run_number)
+            print(f"Starting {experiment} run {experiment_run_number} of {experiment_params['number_of_runs']}.")
+            if experiment == 'evolution':
+                population = evolution.single_evolutionary_run(experiment_run_number)
 
             else:
-                population = evolution.single_random_run(run_number)
+                population = evolution.single_random_run(experiment_run_number)
+        
+            
 
-            modules = sys.modules[__name__]
-            for attr in dir(modules):
-                if attr[0] != '_':
-                    delattr(modules, attr)
-        exp_run = evolution.run_multiple_experiments(experiment_type = running_experiment)
+            for name in dir():
+                if not name.startswith('__') and not name.startswith('experiment') and not name.startswith('send_email_alert') and not name.startswith('gc'):
+                    del globals()[name]
+
+            gc.collect()
+        
+        # exp_run = evolution.run_multiple_experiments(experiment_type = running_experiment)
         try:
-            send_email_alert(subject=f"Experiment '{running_experiment}' completed", message=f"Experiment '{running_experiment}' completed successfully.")
+            send_email_alert(subject=f"Experiment '{experiment}' completed", message=f"Experiment '{experiment}' completed successfully.")
         except Exception as e2:
             print("Warning: Email alert failed with exception:", e2)
 
 except Exception as e:
     traceback_info = traceback.format_exc()
     try:
-        send_email_alert(subject=f"Experiment '{running_experiment}' failed", message=f"Exception: {e} \n {traceback_info}")
+        send_email_alert(subject=f"Experiment '{experiment}' failed", message=f"Exception: {e} \n {traceback_info}")
         print(f"Exception: {e} \n {traceback_info}")
     except Exception as e2:
         print("Warning: Email alert failed with exception:", e2)
