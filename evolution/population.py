@@ -560,9 +560,9 @@ class Population:
 
                 while len(self.species[i].members) < next_gen_species_count[i]:
                     offspring = Individual()
-                    conn_density = np.random.rand()*0.4 + 0.1
                     random_member = np.random.choice(self.species[i].members)
-                    n_nodes = np.random.randint(1, len(random_member.graph.nodes))
+                    n_nodes = np.random.randint(1, np.min([20, len(random_member.graph.nodes)]))
+                    conn_density = np.random.rand()*(1 - 0.9*((n_nodes - 1)/(20 - 1)))
                     samples = self.search_space.sample_from_search_space(n_samples = n_nodes)
                     offspring.random_individual(offspring.graph, predefined_nodes = samples, minimum_connection_density = conn_density)
                     self.species[i].add_member(offspring)
@@ -579,9 +579,9 @@ class Population:
                 if len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) == 0:
                     while len(self.species[i].members) < next_gen_species_count[i]:
                         offspring = Individual()
-                        conn_density = np.random.rand()*0.4 + 0.1
                         random_member = np.random.choice(self.species[i].members)
-                        n_nodes = np.random.randint(1, len(random_member.graph.nodes))
+                        n_nodes = np.random.randint(1, np.min([21, len(random_member.graph.nodes)]))
+                        conn_density = np.random.rand()*(1 - 0.9*((n_nodes - 1)/(20 - 1)))
                         samples = self.search_space.sample_from_search_space(n_samples = n_nodes)
                         offspring.random_individual(offspring.graph, predefined_nodes = samples, minimum_connection_density = conn_density)
                         self.species[i].add_member(offspring)

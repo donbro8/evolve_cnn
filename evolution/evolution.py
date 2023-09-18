@@ -397,7 +397,7 @@ class Evolution():
         for individual in population:
             n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
             samples = self.search_space.sample_from_search_space(n_samples = n_samples)
-            connection_density = np.random.rand()*0.4 + 0.1
+            connection_density = np.random.rand()*(1 - 0.9*((n_samples - minum_node_samples)/(maximum_node_samples - minum_node_samples)))
             individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
             maximum_params = self.train_individual(individual, maximum_params)
 
@@ -425,7 +425,7 @@ class Evolution():
                 individual = Individual()
                 n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
                 samples = self.search_space.sample_from_search_space(n_samples = n_samples)
-                connection_density = np.random.rand()*0.4 + 0.1
+                connection_density = np.random.rand()*(1 - 0.9*((n_samples - minum_node_samples)/(maximum_node_samples - minum_node_samples)))
                 individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
                 maximum_params = self.train_individual(individual, maximum_params)
                 

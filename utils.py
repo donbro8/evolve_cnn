@@ -185,6 +185,14 @@ def build_blocks(block_type = 'resnet'):
         inception_block.add_edge('Conv2D_5', 'output', weight = 1.0)
         inception_block.add_edge('Conv2D_6', 'output', weight = 1.0)
         return inception_block
+    
+    elif block_type == None:
+        no_block = nx.DiGraph()
+
+        no_block.add_node('input')
+        no_block.add_node('output')
+
+        no_block.add_edge('input', 'output', weight = 1.0)
     else:
         print('Block type not recognised. Please choose from: resnet, inception')
 
