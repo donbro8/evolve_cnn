@@ -105,16 +105,14 @@ def data_subsample(X, Y, subsample_size: float = 0.1, seed: int = 42, stratify: 
 
 def paretoset(df, field1, field2, minimize1 = True, minimize2 = True):
     df_pareto = df.copy()
+    df_pareto = df_pareto.dropna(subset = [field1, field2])
     df_pareto['pareto'] = 1
-    for i in range(len(df)):
-        for j in range(len(df)):
+
+    for i in range(len(df_pareto)):
+        for j in range(len(df_pareto)):
             if i != j:
 
-                if df_pareto[field1].iloc[i] is None or df_pareto[field2].iloc[i] is None or df_pareto[field1].iloc[j] is None or df_pareto[field2].iloc[j] is None:
-                        df_pareto['pareto'].iloc[i] = 0
-                        continue
-
-                elif minimize1 and minimize2:
+                if minimize1 and minimize2:
 
                     if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
                         if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
