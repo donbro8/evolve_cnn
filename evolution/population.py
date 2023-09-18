@@ -571,10 +571,21 @@ class Population:
             else:
                 parent_list = sorted(list(itertools.combinations(self.species[i].members, 2)), key = lambda x: x[0].fitness + x[1].fitness, reverse = True)
                 
-                while len(self.species[i].members) < next_gen_species_count[i]:
+                while len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) > 0:
                     parents = parent_list.pop(0)
                     self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
                     offspring_count[i] += 1
+
+                if len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) == 0:
+                    while len(self.species[i].members) < next_gen_species_count[i]:
+                        offspring = Individual()
+                        conn_density = np.random.rand()*0.4 + 0.1
+                        random_member = np.random.choice(self.species[i].members)
+                        n_nodes = np.random.randint(1, len(random_member.graph.nodes))
+                        samples = self.search_space.sample_from_search_space(n_samples = n_nodes)
+                        offspring.random_individual(offspring.graph, predefined_nodes = samples, minimum_connection_density = conn_density)
+                        self.species[i].add_member(offspring)
+                        offspring_count[i] += 1
 
 
         self.population = [individual for species in self.species for individual in species.members]
