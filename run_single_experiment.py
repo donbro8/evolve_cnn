@@ -10,6 +10,8 @@ import gc
 experiment_type = sys.argv[1]
 run_number = int(sys.argv[2])
 
+np.random.seed(run_number)
+
 try:
 
     experiment_params = load_config('configs/experiment_params.yaml')

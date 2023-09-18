@@ -18,6 +18,8 @@ try:
             import sys
             import gc
 
+            np.seed(experiment_run_number)
+
             experiment_params = load_config('configs/experiment_params.yaml')
             print(experiment_params)
 
