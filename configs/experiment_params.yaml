@@ -1,11 +1,11 @@
 experiment_dataset: mnist
-population_size: 20
-generations: 20
+population_size: 30
+generations: 25
 offspring_proportion: 0.5
 normal_cell_repeats: 1
 substructure_repeats: 1
 parameter_limit: 100000
-complexity_penalty: 0.2
+complexity_penalty: 0.6
 number_of_runs: 3
 seed: 42
 batch_size: 32

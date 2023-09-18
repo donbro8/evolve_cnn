@@ -193,6 +193,8 @@ def build_blocks(block_type = 'resnet'):
         no_block.add_node('output')
 
         no_block.add_edge('input', 'output', weight = 1.0)
+        return no_block
+    
     else:
         print('Block type not recognised. Please choose from: resnet, inception')
 
