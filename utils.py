@@ -277,14 +277,15 @@ def pickle_to_pandas_dataframe(experiment_folder_path: str) -> pd.DataFrame:
     no_df = True
 
     for file_name in os.listdir(experiment_folder_path):
-        path = os.path.join(experiment_folder_path, file_name)
-        loaded_data = pickle.load(open(path, 'rb'))
+        if file_name != '.ipynb_checkpoints':
+            path = os.path.join(experiment_folder_path, file_name)
+            loaded_data = pickle.load(open(path, 'rb'))
 
-        for key in loaded_data.keys():
-            if no_df:
-                df = pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [0])
-                no_df = False
+            for key in loaded_data.keys():
+                if no_df:
+                    df = pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [0])
+                    no_df = False
 
-            else:
-                df = pd.concat([df, pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [df.shape[0]])])
+                else:
+                    df = pd.concat([df, pd.DataFrame(data = {key:[value] for key, value in loaded_data[key].__dict__.items()}, index = [df.shape[0]])])
     return df
