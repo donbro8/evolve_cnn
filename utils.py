@@ -171,7 +171,7 @@ def build_blocks(block_type = 'resnet'):
         inception_block.add_node('Conv2D_4', filters = 32, kernel_size = (1,1), activation = 'relu', padding = 'same')
         inception_block.add_node('Conv2D_5', filters = 32, kernel_size = (3,3), activation = 'relu', padding = 'same')
         inception_block.add_node('Conv2D_6', filters = 32, kernel_size = (5,5), activation = 'relu', padding = 'same')
-        inception_block.add_node('MaxPooling2D_1', pool_size = (3,3), padding = 'same')
+        inception_block.add_node('MaxPooling2D_1', pool_size = (3,3), strides = (1,1), padding = 'same')
 
         inception_block.add_edge('input', 'Conv2D_1', weight = 1.0)
         inception_block.add_edge('input', 'Conv2D_2', weight = 1.0)
