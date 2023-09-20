@@ -335,8 +335,7 @@ class Evolution():
             print(f"Generation {generation} of {self.generations} in phase {phase} with individual mutation rate of {individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], mutation_type_rate))}.")
 
             if generation > 1:
-                print("Applying speciation to new population")
-                population.speciation(generation)
+
 
                 print(f"Generating offspring...")
                 population.generate_offspring(offspring_proportion=self.offspring_proportion)
@@ -365,9 +364,8 @@ class Evolution():
 
                 individual.age += 1
 
-            self.population = population.population
-
-            self.population = population.population
+            print("Applying speciation to new population")
+            population.speciation(generation)
 
             evolution_tracker = self.update_experiment_tracker(
                 run_number = run_number,

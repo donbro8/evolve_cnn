@@ -476,7 +476,8 @@ class Population:
     def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.1) -> None:
         for species in self.species:
             species.update_representative()
-        self.reset_species()
+            species.members = []
+        # self.reset_species()
         for individual in self.population:
             species_found = False
             similarity_scores = []
@@ -485,8 +486,7 @@ class Population:
                 similarity_scores.append(similarity_score)
                 if similarity_score >= similarity_threshold:
                     species_found = True
-                    if individual != species.representative:
-                        species.add_member(individual)
+                    species.add_member(individual)
                     break
             if not species_found:
                 if len(self.species) >= np.floor(maximum_species_proportion*self.population_size):
