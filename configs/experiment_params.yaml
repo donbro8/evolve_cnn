@@ -6,7 +6,7 @@ normal_cell_repeats: 1
 substructure_repeats: 1
 parameter_limit: 100000
 complexity_penalty: 0.6
-number_of_runs: 3
+number_of_runs: 5
 seed: 42
 batch_size: 32
 epochs: 5

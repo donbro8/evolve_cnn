@@ -336,7 +336,6 @@ class Evolution():
 
             if generation > 1:
 
-
                 print(f"Generating offspring...")
                 population.generate_offspring(offspring_proportion=self.offspring_proportion)
             
