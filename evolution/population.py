@@ -254,7 +254,11 @@ class Species:
         self.representative = np.random.choice(self.members)
 
     def update_shared_fitness(self) -> None:
-        self.shared_fitness = np.sum([member.fitness for member in self.members])/len(self.members)
+        shared_fitness = np.sum([member.fitness for member in self.members])/len(self.members)
+        if shared_fitness >= 0 and shared_fitness <= 1:
+            self.shared_fitness = shared_fitness
+        else:
+            self.shared_fitness = 0
 
     def update_individual_species_info(self, individual: Individual) -> None:
         individual.species_id = self.id
@@ -405,11 +409,11 @@ class Species:
 
                 offspring.graph.add_edge(node_in, node_out, weight = individual_1.graph[node_in][node_out]['weight'])
 
-                try:
-                    nx.find_cycle(offspring.graph)
-                    offspring.graph.remove_edge(node_in, node_out, weight = individual_1.graph[node_in][node_out]['weight'])
-                except:
-                    pass
+                # try:
+                #     nx.find_cycle(offspring.graph)
+                #     offspring.graph.remove_edge(node_in, node_out, weight = individual_1.graph[node_in][node_out]['weight'])
+                # except:
+                #     pass
             
             elif offspring_edges[i] in individual_2_edges:
 
@@ -421,15 +425,28 @@ class Species:
 
                 offspring.graph.add_edge(node_in, node_out, weight = individual_2.graph[node_in][node_out]['weight'])
 
-                try:
-                    nx.find_cycle(offspring.graph)
-                    offspring.graph.remove_edge(node_in, node_out, weight = individual_2.graph[node_in][node_out]['weight'])
-                except:
-                    pass
+                # try:
+                #     nx.find_cycle(offspring.graph)
+                #     offspring.graph.remove_edge(node_in, node_out, weight = individual_2.graph[node_in][node_out]['weight'])
+                # except:
+                #     pass
             
             else:
                 raise ValueError("Invalid offspring edge.")
-        
+    
+        # Remove cycles
+        while not nx.is_directed_acyclic_graph(offspring.graph):
+            path_edge_list = []
+            for path in map(nx.utils.pairwise, nx.all_simple_paths(offspring.graph, 'input', 'output')):
+                path_edge_list += path
+
+            for edge in list(offspring.graph.edges):
+                if edge not in path_edge_list:
+                    offspring.graph.remove_edge(edge[0], edge[1])
+
+            offspring.graph.remove_nodes_from(list(nx.isolates(offspring.graph)))
+
+
         offspring.offspring_of = (individual_1.id, individual_2.id)
         offspring.is_offspring = True
         offspring.number_of_paths_inherited = n_paths

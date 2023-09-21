@@ -152,7 +152,7 @@ class ModelCompiler():
         if measure_time:
             start_time = time.time()
 
-        callback = TimeOutCallback(train_timeout)
+        callback_timeout = TimeOutCallback(train_timeout)
 
         history = model.fit(
             x = training_data[0],
@@ -162,7 +162,7 @@ class ModelCompiler():
             steps_per_epoch = int(np.ceil(training_data[0].shape[0] / batch_size)),
             verbose = verbose,
             validation_data = validation_data,
-            callbacks = [callback]
+            callbacks = [callback_timeout]
         )
         if measure_time:
             end_time = time.time()
