@@ -429,8 +429,7 @@ def prepare_tree(df):
             else:
                 mutation_type = None
                 parents = df_gen["offspring_of"].iloc[i]
-                if parents != None:
-                  parents = tuple([int(x) for x in parents[1:-1].split(',')])
+
             tree_data[generation][individual_id] = {
                 "is_in_previous_gen": is_in_previous_gen,
                 "mutation_type": mutation_type,
