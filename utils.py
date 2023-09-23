@@ -393,56 +393,44 @@ def pickle_to_pandas_dataframe(experiment_folder_path: str) -> pd.DataFrame:
 def prepare_tree(df):
     tree_data = {}
     df_temp = df.copy().sort_values(["generation", "individual_id"])
-
+    df_temp = df_temp.replace({np.nan: None})
     generation = df_temp["generation"].min()
-
     while generation < df_temp["generation"].max():
         tree_data[generation] = {}
-
         df_gen = df_temp[df_temp["generation"] == generation]
-
         for i in range(len(df_gen)):
             individual_id = df_gen["individual_id"].iloc[i]
             species_id = df_gen["species_id"].iloc[i]
             fitness = df_gen["individual_fitness"].iloc[i]
-
             if species_id != None:
                 species_id = species_id.split("_")[1]
-
             else:
                 species_id = "X"
-
             if generation == 0:
                 is_in_previous_gen = False
-
             else:
                 df_gen_sub_one = df_temp[df_temp["generation"] == generation - 1]
                 is_in_previous_gen = individual_id in list(
                     df_gen_sub_one["individual_id"]
                 )
-
             if is_in_previous_gen:
                 parents = None
                 node_mutation = df_gen["node_mutation"].iloc[i]
                 connection_mutation = df_gen["connection_mutation"].iloc[i]
                 switch_mutation = df_gen["switch_mutation"].iloc[i]
-
                 if node_mutation != None:
                     mutation_type = "node"
-
                 elif connection_mutation != None:
                     mutation_type = "connection"
-
                 elif switch_mutation != None:
                     mutation_type = "switch"
-
                 else:
                     mutation_type = None
-
             else:
                 mutation_type = None
                 parents = df_gen["offspring_of"].iloc[i]
-
+                if parents != None:
+                  parents = tuple([int(x) for x in parents[1:-1].split(',')])
             tree_data[generation][individual_id] = {
                 "is_in_previous_gen": is_in_previous_gen,
                 "mutation_type": mutation_type,
@@ -450,10 +438,9 @@ def prepare_tree(df):
                 "species_id": species_id,
                 "fitness": fitness,
             }
-
         generation += 1
-
     return tree_data
+
 
 
 def plot_tree_data(tree_data, rankdir: str = "LR"):
@@ -464,7 +451,6 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
             "stagger": "true",
         }
     )
-
     for key, value in tree_data.items():
         for individual, info in value.items():
             species_id = tree_data[key][individual]["species_id"]
@@ -473,7 +459,6 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
             )
             if tree_data[key][individual]["is_in_previous_gen"]:
                 mutation_type = tree_data[key][individual]["mutation_type"]
-
                 if mutation_type != None:
                     if mutation_type == "node":
                         dot.edge(
@@ -482,7 +467,6 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
                             color="gray",
                             style="dotted",
                         )
-
                     elif mutation_type == "connection":
                         dot.edge(
                             f"I{individual}_G{key - 1}",
@@ -490,7 +474,6 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
                             color="gray",
                             style="solid",
                         )
-
                     elif mutation_type == "switch":
                         dot.edge(
                             f"I{individual}_G{key - 1}",
@@ -498,10 +481,8 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
                             color="gray",
                             style="dashed",
                         )
-
             else:
                 parents = tree_data[key][individual]["parents"]
-
                 if parents != None:
                     dot.edge(
                         f"I{parents[0]}_G{key - 1}",
@@ -515,7 +496,6 @@ def plot_tree_data(tree_data, rankdir: str = "LR"):
                         style="tapered",
                         arrowhead="none",
                     )
-
     dot.render("tree", view=True)
 
 
