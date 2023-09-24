@@ -3,10 +3,8 @@ import numpy as np
 import sys
 from evolution.population import Individual
 
-
-
 experiment = sys.argv[1]
-run_number = sys.argv[2]
+run_number = int(sys.argv[2])
 
 population = pickle.load(open(f'population_{experiment}.pkl', 'rb'))
 evolution = pickle.load(open(f'evolution_{experiment}.pkl', 'rb'))
@@ -26,10 +24,14 @@ if experiment == 'evolution':
 
     print(f"Generation {evolution.generation} of {evolution.generations} in phase {evolution.phase} with individual mutation rate of {evolution.individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], evolution.mutation_type_rate))}.")
 
+    print('Duplicates starts: ', len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
+    
     if evolution.generation > 1:
 
         print(f"Generating offspring...")
         population.generate_offspring(offspring_proportion=evolution.offspring_proportion)
+
+    print('Duplicates gen off: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
 
     print("Mutating population")
     for i in range(len(population.population)):
@@ -53,8 +55,12 @@ if experiment == 'evolution':
 
         individual.age += 1
 
+    print('Duplicates mut: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
+
     print("Applying speciation to new population")
     population.speciation(evolution.generation)
+
+    print('Duplicates spec: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
 
     evolution_tracker = evolution.update_experiment_tracker(
         run_number = run_number,
@@ -74,24 +80,44 @@ else:
     maximum_node_samples = 21
 
     print(f"Generation {evolution.generation} of {evolution.generations}.")
-    population.population = sorted(population.population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(evolution.population_size*evolution.offspring_proportion))]
-    individuals_to_train = evolution.population_size - len(population.population)
+    
     i = 1
-    while len(population.population) < evolution.population_size:
 
-        individual = Individual()
+    if evolution.generation == 1:
+      for individual in population.population:
         n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
         samples = evolution.search_space.sample_from_search_space(n_samples = n_samples)
         connection_density = np.random.rand()*(1 - 0.9*((n_samples - minum_node_samples)/(maximum_node_samples - minum_node_samples)))
         individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
-        
-        print(f"Attempting training of individual {individual.id}: {i} of {individuals_to_train}.")
+
+        print(f"Attempting training of individual {individual.id}: {i} of {evolution.population_size}.")
         
         evolution.maximum_params = evolution.train_individual(individual, evolution.maximum_params)
-        
-        population.population.append(individual)
 
         i += 1
+    
+    else:
+      population.population = sorted(population.population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(evolution.population_size*evolution.offspring_proportion))]
+    
+      individuals_to_train = evolution.population_size - len(population.population)
+      
+      while len(population.population) < evolution.population_size:
+
+          individual = Individual()
+          population.individual_instances.add(individual)
+          individual.id = len(population.individual_instances)
+          n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
+          samples = evolution.search_space.sample_from_search_space(n_samples = n_samples)
+          connection_density = np.random.rand()*(1 - 0.9*((n_samples - minum_node_samples)/(maximum_node_samples - minum_node_samples)))
+          individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
+          
+          print(f"Attempting training of individual {individual.id}: {i} of {individuals_to_train}.")
+          
+          evolution.maximum_params = evolution.train_individual(individual, evolution.maximum_params)
+          
+          population.population.append(individual)
+
+          i += 1
 
 
     random_run_tracker = evolution.update_experiment_tracker(
@@ -103,7 +129,7 @@ else:
         node_mutation_prob = None,
         connection_mutation_prob = None,
         switch_mutation_prob = None,
-        individuals = population,
+        individuals = population.population,
         save_to_file = True,
         run_type = 'random'
     )
