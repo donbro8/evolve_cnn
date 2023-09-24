@@ -1,5 +1,6 @@
 import pickle
 import numpy as np
+import sys
 
 population = pickle.load('population.pkl')
 evolution = pickle.load('evolution.pkl')
@@ -8,7 +9,7 @@ experiment = sys.argv[1]
 run_number = sys.argv[2]
 
 # Update phase if threshold has been reached
-if evolution.generation > phase_threshold:
+if evolution.generation > evolution.phase_threshold:
 
     print('Phase threshold reached. Moving to next phase...')
     evolution.phase_number += 1
@@ -19,7 +20,7 @@ if evolution.generation > phase_threshold:
 
 print(f"Generation {evolution.generation} of {evolution.generations} in phase {evolution.phase} with individual mutation rate of {evolution.individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], evolution.mutation_type_rate))}.")
 
-if generation > 1:
+if evolution.generation > 1:
 
     print(f"Generating offspring...")
     population.generate_offspring(offspring_proportion=evolution.offspring_proportion)
@@ -47,7 +48,7 @@ for i in range(len(population.population)):
     individual.age += 1
 
 print("Applying speciation to new population")
-population.speciation(generation)
+population.speciation(evolution.generation)
 
 evolution_tracker = evolution.update_experiment_tracker(
     run_number = run_number,
