@@ -74,8 +74,8 @@ else:
     maximum_node_samples = 21
 
     print(f"Generation {evolution.generation} of {evolution.generations}.")
-    population = sorted(population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(evolution.population_size*evolution.offspring_proportion))]
-    while len(population) < evolution.population_size:
+    population.population = sorted(population.population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(evolution.population_size*evolution.offspring_proportion))]
+    while len(population.population) < evolution.population_size:
 
         individual = Individual()
         n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
@@ -84,7 +84,7 @@ else:
         individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
         evolution.maximum_params = evolution.train_individual(individual, evolution.maximum_params)
         
-        population.append(individual)
+        population.population.append(individual)
 
 
     random_run_tracker = evolution.update_experiment_tracker(
