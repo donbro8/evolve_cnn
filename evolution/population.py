@@ -470,12 +470,13 @@ class Population:
         self.search_space = search_space
         self.population_size = population_size
         self.initialisation_type = initialisation_type
+        self.individual_instances = set()
         self.species = []
+        self.pop_species_instances = set()
         
 
     def minimal_initialisation(self) -> None:
         self.population = [Individual() for _ in range(self.population_size)]
-        self.individual_instances = set()
         i = 1
         for individual in self.population:
             self.individual_instances.add(individual)
@@ -483,12 +484,11 @@ class Population:
             i += 1
 
         self.species = [Species(self.population)]
-        self.species_instances = set().add(self.species[0])
+        self.pop_species_instances.add(self.species[0])
 
 
     def random_initialisation(self, n_node_samples: int = 10, sample_probabilties = None, minimum_connection_density: float = 0.75) -> None:
         self.population = [Individual() for _ in range(self.population_size)]
-        self.individual_instances = [set().add(individual) for individual in self.population][0]
         i = 1
         for individual in self.population:
             samples = self.search_space.sample_from_search_space(n_samples = n_node_samples, sample_probabilities = sample_probabilties)
@@ -498,7 +498,7 @@ class Population:
             i += 1
 
         self.species = [Species(self.population)]
-        self.species_instances = set().add(self.species[0])
+        self.pop_species_instances.add(self.species[0])
         
 
 
@@ -508,11 +508,14 @@ class Population:
                 if individual != species.representative:
                     species.remove_member(individual)
     
-    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.1) -> None:
+    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.5) -> None:
+        
         for species in self.species:
             species.update_representative()
             species.members = []
+
         for individual in self.population:
+
             species_found = False
             similarity_scores = []
             for species in self.species:
@@ -529,8 +532,8 @@ class Population:
                 else:
                     new_species = Species([individual], start_generation=generation)
                     self.species.append(new_species)
-                    self.species_instances.add(new_species)
-                    new_species.id = 'species_' + str(len(self.species_instances)) + '_g' + str(generation)
+                    self.pop_species_instances.add(new_species)
+                    new_species.id = 'species_' + str(len(self.pop_species_instances)) + '_g' + str(generation)
 
         for species in self.species:
             species.update_shared_fitness()
