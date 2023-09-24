@@ -286,7 +286,6 @@ class Evolution():
         backend.clear_session()
         return maximum_params
     
-    # def single_generation(self, population: Population, )
     
     
     def single_evolutionary_run(self, run_number: int):
@@ -299,11 +298,11 @@ class Evolution():
         maximum_params = 1
 
         # Initialise phase
-        phase_number = 0
-        phase = self.phase_names[phase_number]
-        phase_threshold = self.phase_thresholds[phase_number]
-        individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
-        mutation_type_rate = self.phases[phase]['mutation_type_rate']
+        self.phase_number = 0
+        self.phase = self.phase_names[phase_number]
+        self.phase_threshold = self.phase_thresholds[phase_number]
+        self.individual_mutation_rate = self.phases[phase]['individual_mutation_rate']
+        self.mutation_type_rate = self.phases[phase]['mutation_type_rate']
 
         evolution_tracker = self.update_experiment_tracker(
             run_number = run_number,
@@ -321,6 +320,8 @@ class Evolution():
         print(f"Generation 0 of {self.generations} in phase {phase}.")
 
         for generation in range(1, self.generations + 1):
+
+            self.generation = generation
 
             # Update phase if threshold has been reached
             if generation > phase_threshold:
