@@ -9,6 +9,7 @@ run_number = int(sys.argv[2])
 population = pickle.load(open(f'population_{experiment}.pkl', 'rb'))
 evolution = pickle.load(open(f'evolution_{experiment}.pkl', 'rb'))
 
+
 evolution.generation += 1
 
 if experiment == 'evolution':
@@ -23,15 +24,11 @@ if experiment == 'evolution':
         evolution.mutation_type_rate = evolution.phases[evolution.phase]['mutation_type_rate']
 
     print(f"Generation {evolution.generation} of {evolution.generations} in phase {evolution.phase} with individual mutation rate of {evolution.individual_mutation_rate} and mutation type probabilities {list(zip(['node', 'connection', 'switch'], evolution.mutation_type_rate))}.")
-
-    print('Duplicates starts: ', len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
     
     if evolution.generation > 1:
 
         print(f"Generating offspring...")
         population.generate_offspring(offspring_proportion=evolution.offspring_proportion)
-
-    print('Duplicates gen off: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
 
     print("Mutating population")
     for i in range(len(population.population)):
@@ -55,12 +52,8 @@ if experiment == 'evolution':
 
         individual.age += 1
 
-    print('Duplicates mut: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
-
     print("Applying speciation to new population")
     population.speciation(evolution.generation)
-
-    print('Duplicates spec: ',  len([individual.id for individual in population.population]) - len(set([individual.id for individual in population.population])))
 
     evolution_tracker = evolution.update_experiment_tracker(
         run_number = run_number,
