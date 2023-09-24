@@ -75,6 +75,8 @@ else:
 
     print(f"Generation {evolution.generation} of {evolution.generations}.")
     population.population = sorted(population.population, key = lambda x: x.fitness, reverse = True)[:int(np.floor(evolution.population_size*evolution.offspring_proportion))]
+    individuals_to_train = evolution.population_size - len(population.population)
+    i = 1
     while len(population.population) < evolution.population_size:
 
         individual = Individual()
@@ -82,9 +84,14 @@ else:
         samples = evolution.search_space.sample_from_search_space(n_samples = n_samples)
         connection_density = np.random.rand()*(1 - 0.9*((n_samples - minum_node_samples)/(maximum_node_samples - minum_node_samples)))
         individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = connection_density)
+        
+        print(f"Attempting training of individual {individual.id}: {i} of {individuals_to_train}.")
+        
         evolution.maximum_params = evolution.train_individual(individual, evolution.maximum_params)
         
         population.population.append(individual)
+
+        i += 1
 
 
     random_run_tracker = evolution.update_experiment_tracker(
