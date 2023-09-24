@@ -4,9 +4,8 @@ import numpy as np
 population = pickle.load('population.pkl')
 evolution = pickle.load('evolution.pkl')
 
-run_number = sys.argv[1]
-generation = sys.argv[2]
-phase_number  = sys.argv[3]
+experiment = sys.argv[1]
+run_number = sys.argv[2]
 
 # Update phase if threshold has been reached
 if evolution.generation > phase_threshold:
@@ -33,7 +32,7 @@ for i in range(len(population.population)):
         mutation_type = np.random.choice(['node', 'connection', 'switch'], p = evolution.mutation_type_rate)
         print(f"Attempting {mutation_type} mutation for individual {individual.id}: {i + 1} of {len(population.population)}.")
         if mutation_type == 'node':
-            node = self.search_space.sample_from_search_space(n_samples = 1)[0]
+            node = evolution.search_space.sample_from_search_space(n_samples = 1)[0]
             individual.add_node(individual.graph, node)
         elif mutation_type == 'connection':
             individual.add_edge(individual.graph)
@@ -62,6 +61,7 @@ evolution_tracker = evolution.update_experiment_tracker(
     individuals = population.population,
     save_to_file = True
 )
+
 
 with open('population.pkl', 'wb') as f:
     pickle.dump(population, f)
