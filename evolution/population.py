@@ -594,8 +594,14 @@ class Population:
 
                 for parents in parent_list:
                     offspring = self.species[i].crossover(parents[0], parents[1])
+                    offspring.offspring_of = (parents[0].id, parents[1].id)
+                    offspring.is_offspring = True
+                        
                     self.individual_instances.add(offspring)
                     offspring.id = len(self.individual_instances)
+                    parents[0].offspring_generated.append(offspring.id)
+                    parents[1].offspring_generated.append(offspring.id)
+                    
                     self.species[i].add_member(offspring)
                     offspring_count[i] += 1
 
@@ -617,8 +623,14 @@ class Population:
                 while len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) > 0:
                     parents = parent_list.pop(0)
                     offspring = self.species[i].crossover(parents[0], parents[1])
+                    offspring.offspring_of = (parents[0].id, parents[1].id)
+                    offspring.is_offspring = True
+
                     self.individual_instances.add(offspring)
                     offspring.id = len(self.individual_instances)
+                    parents[0].offspring_generated.append(offspring.id)
+                    parents[1].offspring_generated.append(offspring.id)    
+                    
                     self.species[i].add_member(offspring)
                     offspring_count[i] += 1
 
