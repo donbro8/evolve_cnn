@@ -14,6 +14,7 @@ import pickle
 from pyvis.network import Network
 from IPython.core.display import display, HTML
 import numpy as np
+import glob
 
 
 def load_config(path: str):
@@ -700,3 +701,31 @@ def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = [
               ranges.remove(val_acc_range)
 
     return training_graphs
+
+def convert_model_results(path):
+    all_data = []
+    for file in [f for f in glob.glob(os.path.join(path,'*')) if '.pkl' in f]:
+        data = pickle.load(open(file, 'rb'))
+        for dataset, experiment_data in data.items():
+            for block, training_history in experiment_data.items():
+                all_data += [
+                      {
+                          "dataset":dataset,
+                          "block_id":block,
+                          "loss":training_history["loss"][epoch],
+                          "accuracy":training_history["accuracy"][epoch],
+                          "mse":training_history["mse"][epoch],
+                          "val_loss":training_history["val_loss"][epoch],
+                          "val_accuracy":training_history["val_accuracy"][epoch],
+                          "val_mse":training_history["val_mse"][epoch],
+                          "training_time":training_history["training_time"],
+                          "timeout_reached":training_history["timeout_reached"],
+                          "test_accuracy":training_history["test_accuracy"],
+                          "number_of_params":training_history["number_of_params"],
+                          "normal_cell_repeats":training_history["normal_cell_repeats"],
+                          "substructure_repeats":training_history["substructure_repeats"],
+                      }
+                      for epoch in range(len(training_history["loss"]))
+                ]
+
+    return pd.DataFrame.from_records(all_data)
