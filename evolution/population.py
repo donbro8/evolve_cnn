@@ -508,7 +508,7 @@ class Population:
                 if individual != species.representative:
                     species.remove_member(individual)
     
-    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.5) -> None:
+    def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.1) -> None:
         
         for species in self.species:
             species.update_representative()
