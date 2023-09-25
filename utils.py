@@ -679,10 +679,7 @@ def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = [
         
         if len(df_range) > 0:
             individual = df_range.sample(n = 1, random_state=42)
-            print(type(individual))
-            print(individual.iloc[0]["individual_id"])
             key = f'I{individual.iloc[0]["individual_id"]}_G{individual.iloc[0]["generation"]}_{experiment[0].upper()}'
-            print(key)
             if key not in training_graphs.keys():
                 training_graphs[key] = individual.iloc[0]['individual'].graph
                 individuals_to_assign -= 1
