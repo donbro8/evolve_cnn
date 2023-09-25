@@ -637,12 +637,13 @@ def plot_tree_data_pyviz(tree_data, rankdir: str = "LR"):
     #   }
 
 
-def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = ['evolution','random'], sample_size = 10, min_fitness = 0.1, max_fitness = 0.9, seed = 42):
+def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = ['evolution','random'], sample_size = 10, seed = 42):
 
     assert 'pareto' in df_pareto_evolution.columns and 'pareto' in df_pareto_random.columns
     
     np.random.seed(seed)
-    rand_fitness_distr = np.random.rand(sample_size)*min_fitness + np.linspace(min_fitness, max_fitness, sample_size)
+
+    
 
     training_graphs = {
         'basic_block':build_blocks(block_type = None),
@@ -655,25 +656,48 @@ def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = [
       if experiment == 'evolution':
 
         df_temp = df_pareto_evolution.copy()[df_pareto_evolution['pareto'] == 1]
+        
+        min_fitness = df_temp['individual_fitness'].min()
+        max_fitness = df_temp['individual_fitness'].max()
+        step_size = max_fitness/sample_size
+        ranges = list(zip(np.arange(min_fitness, max_fitness,step_size).round(2), np.arange(min_fitness + step_size, max_fitness + step_size,step_size).round(2)))[::-1]
 
       else:
 
         df_temp = df_pareto_random.copy()[df_pareto_random['pareto'] == 1]
+        min_fitness = df_temp['individual_fitness'].min()
+        max_fitness = df_temp['individual_fitness'].max()
+        step_size = max_fitness/sample_size
+        ranges = list(zip(np.arange(min_fitness, max_fitness,step_size).round(2), np.arange(min_fitness + step_size, max_fitness + step_size,step_size).round(2)))[::-1]
 
-      for r in rand_fitness_distr:
-        df_temp['diff'] = (df_temp['individual_fitness']  - r).abs()
-        df_temp = df_temp.sort_values(by=['diff']).groupby(by=['individual_id']).head(1)
-        i = 0
-        while True:
-          individual_id = df_temp['individual_id'].iloc[i]
-          generation = df_temp['generation'].iloc[i]
+      individuals_to_assign = sample_size
 
-          key = f'I{individual_id}_G{generation}_{experiment[0].upper()}'
+      for val_acc_range in ranges:
 
+        df_range = df_temp[(df_temp['individual_fitness'] > val_acc_range[0]) & (df_temp['individual_fitness'] <= val_acc_range[1])]
+        
+        
+        if len(df_range) > 0:
+            individual = df_range.sample(n = 1, random_state=42)
+            print(type(individual))
+            print(individual.iloc[0]["individual_id"])
+            key = f'I{individual.iloc[0]["individual_id"]}_G{individual.iloc[0]["generation"]}_{experiment[0].upper()}'
+            print(key)
+            if key not in training_graphs.keys():
+                training_graphs[key] = individual.iloc[0]['individual'].graph
+                individuals_to_assign -= 1
+                ranges.remove(val_acc_range)
+
+      while individuals_to_assign > 0:
+        for val_acc_range in ranges:
+          range_mean = (val_acc_range[0] + val_acc_range[1])/2
+          df_diff = df_temp.copy()
+          df_diff['diff'] = (df_temp['individual_fitness']  - range_mean).abs()
+          individual = df_diff.sort_values(by=['diff']).groupby(by=['individual_id']).head(1)
+          key = f'I{individual.iloc[0]["individual_id"]}_G{individual.iloc[0]["generation"]}_{experiment[0].upper()}'
           if key not in training_graphs.keys():
-            training_graphs[key] = df_temp['individual'].iloc[i].graph
-            break
-
-          i += 1
+              training_graphs[key] = individual.iloc[0]['individual'].graph
+              individuals_to_assign -= 1
+              ranges.remove(val_acc_range)
 
     return training_graphs
