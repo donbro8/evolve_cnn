@@ -709,6 +709,7 @@ def convert_model_results(path):
                       {
                           "dataset":dataset,
                           "block_id":block,
+                          "epoch":epoch + 1,
                           "loss":training_history["loss"][epoch],
                           "accuracy":training_history["accuracy"][epoch],
                           "mse":training_history["mse"][epoch],
