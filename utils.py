@@ -4,7 +4,7 @@ import networkx as nx
 import graphviz
 from sklearn.model_selection import train_test_split
 import keras
-from tensorflow.keras import backend
+from keras import backend
 import json
 import datetime
 from evolution.network import ModelCompiler
@@ -275,10 +275,8 @@ def post_training_analysis(
 ):
     model_results = {key: {} for key in datasets}
 
-    maximum_params = 1
-
     for dataset in model_results.keys():
-        print(f"Running analysis on {dataset}...")
+        print(f"Running analysis on {dataset} dataset...")
         (X_train, Y_train), (X_test, Y_test) = dataset_loader(dataset)
         network_graphs = update_output_classes(network_graphs, Y_train.shape[-1])
         for key, value in normal_cells.items():
@@ -298,7 +296,6 @@ def post_training_analysis(
             for layer in model.layers:
               if 'NC' in layer.name:
                   num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
-                  maximum_params = np.max([num_params, maximum_params])
                   break
             
             history = model_compiler.train_model(
@@ -315,6 +312,8 @@ def post_training_analysis(
 
             history.history["test_accuracy"] = model.evaluate(X_test, Y_test)[1]
             history.history["number_of_params"] = num_params
+            history.history["normal_cell_repeats"] = normal_cell_repeats
+            history.history["substructure_repeats"] = substructure_repeats
             model_results[dataset][key] = history.history
 
     if save_results:
