@@ -392,6 +392,7 @@ class Evolution():
         population = [Individual() for _ in range(self.population_size)]
         i = 0
         maximum_params = 0
+        np.random.seed(run_number)
         for individual in population:
             n_samples = np.random.randint(minum_node_samples, maximum_node_samples)
             samples = self.search_space.sample_from_search_space(n_samples = n_samples)

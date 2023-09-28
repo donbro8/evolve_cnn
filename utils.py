@@ -15,6 +15,7 @@ from pyvis.network import Network
 from IPython.core.display import display, HTML
 import numpy as np
 import glob
+from itertools import product
 
 
 def load_config(path: str):
@@ -126,35 +127,62 @@ def data_subsample(
     return (X_sub, Y_sub), (X_extra, Y_extra)
 
 
-def paretoset(df, field1, field2, minimize1=True, minimize2=True):
-    df_pareto = df.copy()
-    df_pareto = df_pareto.dropna(subset=[field1, field2])
-    df_pareto["pareto"] = 1
 
-    for i in range(len(df_pareto)):
-        for j in range(len(df_pareto)):
-            if i != j:
-                if minimize1 and minimize2:
-                    if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
 
-                elif minimize1 and not minimize2:
-                    if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] < df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+def dataframe_subgroups(df, groupby = None):
+    if groupby is not None:
+      
+      all_combinations = list(product(*[list(df[group].unique()) for group in groupby]))
+      df_list = []
+      for combo in all_combinations:
+          df_slice = df
+          for i, group in enumerate(groupby):
+              df_slice = df_slice[df_slice[group] == combo[i]]
 
-                elif not minimize1 and minimize2:
-                    if df_pareto[field1].iloc[i] < df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+          if len(df_slice) > 0:
+              df_list.append(df_slice)
+    else:
+        df_list = [df]
 
-                elif not minimize1 and not minimize2:
-                    if df_pareto[field1].iloc[i] < df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] < df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+    return df_list
 
-    return df_pareto
+def paretoset(df, x, y, minimize = [True, True], y_less_idx = 1, y_greater_idx = 0):
+
+    if all(minimize) or (not all(minimize) and minimize[-1]):
+        y_less_idx = 0
+        y_greater_idx = 1 
+
+
+    df_sorted = df.sort_values(by=['x','y'], ascending = minimize)
+    df_sorted['pareto'] = 1
+
+    num_pareto = df_sorted['pareto'].sum()
+    delta_pareto = num_pareto
+
+
+    while delta_pareto > 0:
+
+      row_indices = df_sorted[df_sorted['pareto'] == 1].index
+
+      for i in range(len(row_indices) - 1):
+          y_check = df_sorted['y'].loc[row_indices[i]], df_sorted['y'].loc[row_indices[i + 1]]
+          df_sorted.loc[row_indices[i + 1], 'pareto'] = 0 if y_check[y_less_idx] < y_check[y_greater_idx] else 1 
+
+      next_num_pareto = df_sorted['pareto'].sum()
+      delta_pareto = num_pareto - next_num_pareto
+      num_pareto = next_num_pareto
+
+    return df_sorted
+
+def paretoset_grouped(df, x, y, groupby = None, minimize = [True, True], y_less_idx = 1, y_greater_idx = 0):
+
+    df_grouped_list = dataframe_subgroups(df = df, groupby = groupby)
+
+    for i, df_group in enumerate(df_grouped_list):
+
+        df_grouped_list[i] = paretoset(df_group, x = x, y = y, minimize = minimize, y_less_idx = y_less_idx, y_greater_idx = y_greater_idx)
+
+    return pd.concat(df_grouped_list)
 
 
 def build_blocks(block_type="resnet"):
