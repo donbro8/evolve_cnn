@@ -14,6 +14,7 @@ from pyvis.network import Network
 from IPython.core.display import display, HTML
 import numpy as np
 import glob
+from keras.optimizers import Adam
 
 
 def load_config(path: str):
@@ -306,7 +307,7 @@ def post_training_analysis(
                 batch_size=32,
                 epochs=epochs,
                 verbose=1,
-                optimizer="adam",
+                optimizer=Adam(learning_rate=0.0001),
                 loss="categorical_crossentropy",
                 metrics=["accuracy", "mse"],
             )
