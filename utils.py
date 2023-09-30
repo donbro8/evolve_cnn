@@ -13,6 +13,7 @@ import pickle
 from pyvis.network import Network
 from IPython.core.display import display, HTML
 import numpy as np
+import glob
 
 
 def load_config(path: str):
@@ -155,20 +156,29 @@ def paretoset(df, field1, field2, minimize1=True, minimize2=True):
     return df_pareto
 
 
-def build_blocks(block_type="resnet"):
+def build_blocks(block_type="resnet", n_filters = 8):
     if block_type == "resnet":
         resnet_block = nx.DiGraph()
 
         resnet_block.add_node("input")
         resnet_block.add_node("output")
         resnet_block.add_node(
-            "Conv2D_1", filters=32, kernel_size=(3, 3), padding="same"
+            "Conv2D_1", 
+            filters=n_filters, 
+            kernel_size=(3, 3), 
+            padding="same"
         )
         resnet_block.add_node(
-            "Conv2D_2", filters=32, kernel_size=(3, 3), padding="same"
+            "Conv2D_2", 
+            filters=n_filters, 
+            kernel_size=(3, 3), 
+            padding="same"
         )
         resnet_block.add_node(
-            "Conv2D_3", filters=32, kernel_size=(1, 1), padding="same"
+            "Conv2D_3", 
+            filters=n_filters, 
+            kernel_size=(1, 1), 
+            padding="same"
         )
         resnet_block.add_node("BatchNormalization_1")
         resnet_block.add_node("BatchNormalization_2")
@@ -192,49 +202,47 @@ def build_blocks(block_type="resnet"):
         inception_block.add_node("output")
         inception_block.add_node(
             "Conv2D_1",
-            filters=32,
+            filters=n_filters,
             kernel_size=(1, 1),
             activation="relu",
             padding="same",
         )
         inception_block.add_node(
             "Conv2D_2",
-            filters=32,
+            filters=n_filters,
             kernel_size=(1, 1),
             activation="relu",
             padding="same",
         )
         inception_block.add_node(
             "Conv2D_3",
-            filters=32,
+            filters=n_filters,
             kernel_size=(1, 1),
             activation="relu",
             padding="same",
         )
         inception_block.add_node(
             "Conv2D_4",
-            filters=32,
+            filters=n_filters,
             kernel_size=(1, 1),
             activation="relu",
             padding="same",
         )
         inception_block.add_node(
             "Conv2D_5",
-            filters=32,
+            filters=n_filters,
             kernel_size=(3, 3),
             activation="relu",
             padding="same",
         )
         inception_block.add_node(
             "Conv2D_6",
-            filters=32,
+            filters=n_filters,
             kernel_size=(5, 5),
             activation="relu",
             padding="same",
         )
-        inception_block.add_node(
-            "MaxPooling2D_1", pool_size=(3, 3), strides=(1, 1), padding="same"
-        )
+        inception_block.add_node("MaxPooling2D_1", pool_size=(3, 3), strides=(1, 1), padding="same")
 
         inception_block.add_edge("input", "Conv2D_1", weight=1.0)
         inception_block.add_edge("input", "Conv2D_2", weight=1.0)
@@ -665,3 +673,33 @@ def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = [
           i += 1
 
     return training_graphs
+
+
+def convert_model_results(path):
+    all_data = []
+    for file in [f for f in glob.glob(os.path.join(path,'*')) if '.pkl' in f]:
+        data = pickle.load(open(file, 'rb'))
+        for dataset, experiment_data in data.items():
+            for block, training_history in experiment_data.items():
+                all_data += [
+                      {
+                          "dataset":dataset,
+                          "block_id":block,
+                          "epoch":epoch + 1,
+                          "loss":training_history["loss"][epoch],
+                          "accuracy":training_history["accuracy"][epoch],
+                          "mse":training_history["mse"][epoch],
+                          "val_loss":training_history["val_loss"][epoch],
+                          "val_accuracy":training_history["val_accuracy"][epoch],
+                          "val_mse":training_history["val_mse"][epoch],
+                          "training_time":training_history["training_time"],
+                          "timeout_reached":training_history["timeout_reached"],
+                          "test_accuracy":training_history["test_accuracy"],
+                          "number_of_params":training_history["number_of_params"],
+                          "normal_cell_repeats":training_history["normal_cell_repeats"],
+                          "substructure_repeats":training_history["substructure_repeats"]
+                      }
+                      for epoch in range(len(training_history["loss"]))
+                ]
+
+    return pd.DataFrame.from_records(all_data)
