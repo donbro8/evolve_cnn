@@ -187,6 +187,7 @@ def build_blocks(block_type="resnet", n_filters = 8):
         resnet_block.add_node("ReLU_2")
 
         resnet_block.add_edge("input", "Conv2D_1", weight=1.0)
+        resnet_block.add_edge("input", "Conv2D_3", weight=1.0)
         resnet_block.add_edge("Conv2D_1", "BatchNormalization_1", weight=1.0)
         resnet_block.add_edge("BatchNormalization_1", "ReLU_1", weight=1.0)
         resnet_block.add_edge("ReLU_1", "Conv2D_2", weight=1.0)
