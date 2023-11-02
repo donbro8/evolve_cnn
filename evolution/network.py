@@ -1,9 +1,10 @@
 from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, Dense, MaxPooling2D, AveragePooling2D, SpatialDropout2D, GlobalAveragePooling2D, Flatten, Lambda, Concatenate, Input, ReLU
 from tensorflow.keras.models import Model
-from tensorflow.keras.callbacks import Callback 
+from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau
 import time
 import networkx as nx
 import numpy as np
+
 
 class BuildLayer(Layer):
 
@@ -142,7 +143,7 @@ class ModelCompiler():
         loss: str = 'categorical_crossentropy',
         metrics: list[str] = ['accuracy','mse'],
         measure_time: bool = True,
-        train_timeout: int = 600
+        callbacks: list = [TimeOutCallback(600), ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.001) ]
     ):
         model.compile(
             optimizer = optimizer,
@@ -152,7 +153,6 @@ class ModelCompiler():
         if measure_time:
             start_time = time.time()
 
-        callback = TimeOutCallback(train_timeout)
 
         history = model.fit(
             x = training_data[0],
@@ -162,10 +162,10 @@ class ModelCompiler():
             steps_per_epoch = int(np.ceil(training_data[0].shape[0] / batch_size)),
             verbose = verbose,
             validation_data = validation_data,
-            callbacks = [callback]
+            callbacks = callbacks
         )
         if measure_time:
             end_time = time.time()
             history.history['training_time'] = end_time - start_time
-            history.history['timeout_reached'] = callback.timeout_reached
+            history.history['timeout_reached'] = callbacks[0].timeout_reached
         return history
