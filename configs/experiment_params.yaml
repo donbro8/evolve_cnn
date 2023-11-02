@@ -1,6 +1,6 @@
 experiment_dataset: mnist
-population_size: 30
-generations: 25
+population_size: 100
+generations: 30
 offspring_proportion: 0.5
 normal_cell_repeats: 1
 substructure_repeats: 1

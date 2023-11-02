@@ -470,18 +470,36 @@ class Population:
         self.search_space = search_space
         self.population_size = population_size
         self.initialisation_type = initialisation_type
+        self.individual_instances = set()
         self.species = []
+        self.pop_species_instances = set()
         
+
     def minimal_initialisation(self) -> None:
         self.population = [Individual() for _ in range(self.population_size)]
+        i = 1
+        for individual in self.population:
+            self.individual_instances.add(individual)
+            individual.id = i
+            i += 1
+
         self.species = [Species(self.population)]
+        self.pop_species_instances.add(self.species[0])
+
 
     def random_initialisation(self, n_node_samples: int = 10, sample_probabilties = None, minimum_connection_density: float = 0.75) -> None:
         self.population = [Individual() for _ in range(self.population_size)]
+        i = 1
         for individual in self.population:
             samples = self.search_space.sample_from_search_space(n_samples = n_node_samples, sample_probabilities = sample_probabilties)
             individual.random_individual(individual.graph, predefined_nodes=samples, minimum_connection_density = minimum_connection_density)
+            self.individual_instances.add(individual)
+            individual.id = i
+            i += 1
+
         self.species = [Species(self.population)]
+        self.pop_species_instances.add(self.species[0])
+        
 
 
     def reset_species(self) -> None:
@@ -491,11 +509,13 @@ class Population:
                     species.remove_member(individual)
     
     def speciation(self, generation: int, c1: float = 1.0, c2: float = 1.0, similarity_threshold: float = 0.6, maximum_species_proportion: float = 0.1) -> None:
+        
         for species in self.species:
             species.update_representative()
             species.members = []
-        # self.reset_species()
+
         for individual in self.population:
+
             species_found = False
             similarity_scores = []
             for species in self.species:
@@ -510,7 +530,11 @@ class Population:
                     self.species[np.argmax(similarity_scores)].add_member(individual)
 
                 else:
-                    self.species.append(Species([individual], start_generation=generation))
+                    new_species = Species([individual], start_generation=generation)
+                    self.species.append(new_species)
+                    self.pop_species_instances.add(new_species)
+                    new_species.id = 'species_' + str(len(self.pop_species_instances)) + '_g' + str(generation)
+
         for species in self.species:
             species.update_shared_fitness()
             for individual in species.members:
@@ -572,11 +596,22 @@ class Population:
                 parent_list = list(itertools.combinations(self.species[i].members, 2))
 
                 for parents in parent_list:
-                    self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+                    offspring = self.species[i].crossover(parents[0], parents[1])
+                    offspring.offspring_of = (parents[0].id, parents[1].id)
+                    offspring.is_offspring = True
+                        
+                    self.individual_instances.add(offspring)
+                    offspring.id = len(self.individual_instances)
+                    parents[0].offspring_generated.append(offspring.id)
+                    parents[1].offspring_generated.append(offspring.id)
+                    
+                    self.species[i].add_member(offspring)
                     offspring_count[i] += 1
 
                 while len(self.species[i].members) < next_gen_species_count[i]:
                     offspring = Individual()
+                    self.individual_instances.add(offspring)
+                    offspring.id = len(self.individual_instances)
                     random_member = np.random.choice(self.species[i].members)
                     n_nodes = np.random.randint(1, np.min([20, len(random_member.graph.nodes)]))
                     conn_density = np.random.rand()*(1 - 0.9*((n_nodes - 1)/(20 - 1)))
@@ -590,12 +625,23 @@ class Population:
                 
                 while len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) > 0:
                     parents = parent_list.pop(0)
-                    self.species[i].add_member(self.species[i].crossover(parents[0], parents[1]))
+                    offspring = self.species[i].crossover(parents[0], parents[1])
+                    offspring.offspring_of = (parents[0].id, parents[1].id)
+                    offspring.is_offspring = True
+
+                    self.individual_instances.add(offspring)
+                    offspring.id = len(self.individual_instances)
+                    parents[0].offspring_generated.append(offspring.id)
+                    parents[1].offspring_generated.append(offspring.id)    
+                    
+                    self.species[i].add_member(offspring)
                     offspring_count[i] += 1
 
                 if len(self.species[i].members) < next_gen_species_count[i] and len(parent_list) == 0:
                     while len(self.species[i].members) < next_gen_species_count[i]:
                         offspring = Individual()
+                        self.individual_instances.add(offspring)
+                        offspring.id = len(self.individual_instances)
                         random_member = np.random.choice(self.species[i].members)
                         n_nodes = np.random.randint(1, np.min([21, len(random_member.graph.nodes)]))
                         conn_density = np.random.rand()*(1 - 0.9*((n_nodes - 1)/(20 - 1)))

@@ -4,6 +4,7 @@ import networkx as nx
 import graphviz
 from sklearn.model_selection import train_test_split
 import keras
+from keras import backend
 import json
 import datetime
 from evolution.network import ModelCompiler
@@ -14,7 +15,9 @@ from pyvis.network import Network
 from IPython.core.display import display, HTML
 import numpy as np
 import glob
+from itertools import product
 from keras.optimizers import Adam
+
 
 
 def load_config(path: str):
@@ -126,35 +129,62 @@ def data_subsample(
     return (X_sub, Y_sub), (X_extra, Y_extra)
 
 
-def paretoset(df, field1, field2, minimize1=True, minimize2=True):
-    df_pareto = df.copy()
-    df_pareto = df_pareto.dropna(subset=[field1, field2])
-    df_pareto["pareto"] = 1
 
-    for i in range(len(df_pareto)):
-        for j in range(len(df_pareto)):
-            if i != j:
-                if minimize1 and minimize2:
-                    if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
 
-                elif minimize1 and not minimize2:
-                    if df_pareto[field1].iloc[i] > df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] < df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+def dataframe_subgroups(df, groupby = None):
+    if groupby is not None:
+      
+      all_combinations = list(product(*[list(df[group].unique()) for group in groupby]))
+      df_list = []
+      for combo in all_combinations:
+          df_slice = df
+          for i, group in enumerate(groupby):
+              df_slice = df_slice[df_slice[group] == combo[i]]
 
-                elif not minimize1 and minimize2:
-                    if df_pareto[field1].iloc[i] < df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] > df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+          if len(df_slice) > 0:
+              df_list.append(df_slice)
+    else:
+        df_list = [df]
 
-                elif not minimize1 and not minimize2:
-                    if df_pareto[field1].iloc[i] < df_pareto[field1].iloc[j]:
-                        if df_pareto[field2].iloc[i] < df_pareto[field2].iloc[j]:
-                            df_pareto["pareto"].iloc[i] = 0
+    return df_list
 
-    return df_pareto
+def paretoset(df, x, y, minimize = [True, True], y_less_idx = 1, y_greater_idx = 0):
+
+    if all(minimize) or (not all(minimize) and minimize[-1]):
+        y_less_idx = 0
+        y_greater_idx = 1 
+
+
+    df_sorted = df.sort_values(by=['x','y'], ascending = minimize)
+    df_sorted['pareto'] = 1
+
+    num_pareto = df_sorted['pareto'].sum()
+    delta_pareto = num_pareto
+
+
+    while delta_pareto > 0:
+
+      row_indices = df_sorted[df_sorted['pareto'] == 1].index
+
+      for i in range(len(row_indices) - 1):
+          y_check = df_sorted['y'].loc[row_indices[i]], df_sorted['y'].loc[row_indices[i + 1]]
+          df_sorted.loc[row_indices[i + 1], 'pareto'] = 0 if y_check[y_less_idx] < y_check[y_greater_idx] else 1 
+
+      next_num_pareto = df_sorted['pareto'].sum()
+      delta_pareto = num_pareto - next_num_pareto
+      num_pareto = next_num_pareto
+
+    return df_sorted
+
+def paretoset_grouped(df, x, y, groupby = None, minimize = [True, True], y_less_idx = 1, y_greater_idx = 0):
+
+    df_grouped_list = dataframe_subgroups(df = df, groupby = groupby)
+
+    for i, df_group in enumerate(df_grouped_list):
+
+        df_grouped_list[i] = paretoset(df_group, x = x, y = y, minimize = minimize, y_less_idx = y_less_idx, y_greater_idx = y_greater_idx)
+
+    return pd.concat(df_grouped_list)
 
 
 def build_blocks(block_type="resnet", n_filters = 8):
@@ -285,7 +315,7 @@ def post_training_analysis(
     model_results = {key: {} for key in datasets}
 
     for dataset in model_results.keys():
-        print(f"Running analysis on {dataset}...")
+        print(f"Running analysis on {dataset} dataset...")
         (X_train, Y_train), (X_test, Y_test) = dataset_loader(dataset)
         network_graphs = update_output_classes(network_graphs, Y_train.shape[-1])
         for key, value in normal_cells.items():
@@ -301,6 +331,12 @@ def post_training_analysis(
                 substructure_repeats=substructure_repeats,
             )
             model = model_compiler.build_model(input_shape=X_train.shape[1:])
+            
+            for layer in model.layers:
+              if 'NC' in layer.name:
+                  num_params = sum(backend.count_params(p) for p in layer.trainable_weights)
+                  break
+            
             history = model_compiler.train_model(
                 training_data=(X_train, Y_train),
                 validation_data=(X_test, Y_test),
@@ -312,7 +348,11 @@ def post_training_analysis(
                 loss="categorical_crossentropy",
                 metrics=["accuracy", "mse"],
             )
+
             history.history["test_accuracy"] = model.evaluate(X_test, Y_test)[1]
+            history.history["number_of_params"] = num_params
+            history.history["normal_cell_repeats"] = normal_cell_repeats
+            history.history["substructure_repeats"] = substructure_repeats
             model_results[dataset][key] = history.history
 
     if save_results:
@@ -635,12 +675,13 @@ def plot_tree_data_pyviz(tree_data, rankdir: str = "LR"):
     #   }
 
 
-def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = ['evolution','random'], sample_size = 10, min_fitness = 0.1, max_fitness = 0.9, seed = 42):
+def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = ['evolution','random'], sample_size = 10, seed = 42):
 
     assert 'pareto' in df_pareto_evolution.columns and 'pareto' in df_pareto_random.columns
     
     np.random.seed(seed)
-    rand_fitness_distr = np.random.rand(sample_size)*min_fitness + np.linspace(min_fitness, max_fitness, sample_size)
+
+    
 
     training_graphs = {
         'basic_block':build_blocks(block_type = None),
@@ -653,26 +694,75 @@ def build_training_graphs(df_pareto_evolution, df_pareto_random, experiments = [
       if experiment == 'evolution':
 
         df_temp = df_pareto_evolution.copy()[df_pareto_evolution['pareto'] == 1]
+        
+        min_fitness = df_temp['individual_fitness'].min()
+        max_fitness = df_temp['individual_fitness'].max()
+        step_size = max_fitness/sample_size
+        ranges = list(zip(np.arange(min_fitness, max_fitness,step_size).round(2), np.arange(min_fitness + step_size, max_fitness + step_size,step_size).round(2)))[::-1]
 
       else:
 
         df_temp = df_pareto_random.copy()[df_pareto_random['pareto'] == 1]
+        min_fitness = df_temp['individual_fitness'].min()
+        max_fitness = df_temp['individual_fitness'].max()
+        step_size = max_fitness/sample_size
+        ranges = list(zip(np.arange(min_fitness, max_fitness,step_size).round(2), np.arange(min_fitness + step_size, max_fitness + step_size,step_size).round(2)))[::-1]
 
-      for r in rand_fitness_distr:
-        df_temp['diff'] = (df_temp['individual_fitness']  - r).abs()
-        df_temp = df_temp.sort_values(by=['diff']).groupby(by=['individual_id']).head(1)
-        i = 0
-        while True:
-          individual_id = df_temp['individual_id'].iloc[i]
-          generation = df_temp['generation'].iloc[i]
+      individuals_to_assign = sample_size
 
-          key = f'I{individual_id}_G{generation}_{experiment[0].upper()}'
+      for val_acc_range in ranges:
 
+        df_range = df_temp[(df_temp['individual_fitness'] > val_acc_range[0]) & (df_temp['individual_fitness'] <= val_acc_range[1])]
+        
+        
+        if len(df_range) > 0:
+            individual = df_range.sample(n = 1, random_state=42)
+            key = f'I{individual.iloc[0]["individual_id"]}_G{individual.iloc[0]["generation"]}_{experiment[0].upper()}'
+            if key not in training_graphs.keys():
+                training_graphs[key] = individual.iloc[0]['individual'].graph
+                individuals_to_assign -= 1
+                ranges.remove(val_acc_range)
+
+      while individuals_to_assign > 0:
+        for val_acc_range in ranges:
+          range_mean = (val_acc_range[0] + val_acc_range[1])/2
+          df_diff = df_temp.copy()
+          df_diff['diff'] = (df_temp['individual_fitness']  - range_mean).abs()
+          individual = df_diff.sort_values(by=['diff']).groupby(by=['individual_id']).head(1)
+          key = f'I{individual.iloc[0]["individual_id"]}_G{individual.iloc[0]["generation"]}_{experiment[0].upper()}'
           if key not in training_graphs.keys():
-            training_graphs[key] = df_temp['individual'].iloc[i].graph
-            break
+              training_graphs[key] = individual.iloc[0]['individual'].graph
+              individuals_to_assign -= 1
+              ranges.remove(val_acc_range)
 
-          i += 1
+    return training_graphs
+
+def convert_model_results(path):
+    all_data = []
+    for file in [f for f in glob.glob(os.path.join(path,'*')) if '.pkl' in f]:
+        data = pickle.load(open(file, 'rb'))
+        for dataset, experiment_data in data.items():
+            for block, training_history in experiment_data.items():
+                all_data += [
+                      {
+                          "dataset":dataset,
+                          "block_id":block,
+                          "epoch":epoch + 1,
+                          "loss":training_history["loss"][epoch],
+                          "accuracy":training_history["accuracy"][epoch],
+                          "mse":training_history["mse"][epoch],
+                          "val_loss":training_history["val_loss"][epoch],
+                          "val_accuracy":training_history["val_accuracy"][epoch],
+                          "val_mse":training_history["val_mse"][epoch],
+                          "training_time":training_history["training_time"],
+                          "timeout_reached":training_history["timeout_reached"],
+                          "test_accuracy":training_history["test_accuracy"],
+                          "number_of_params":training_history["number_of_params"],
+                          "normal_cell_repeats":training_history["normal_cell_repeats"],
+                          "substructure_repeats":training_history["substructure_repeats"],
+                      }
+                      for epoch in range(len(training_history["loss"]))
+                ]
 
     return training_graphs
 
